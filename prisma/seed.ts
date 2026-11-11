@@ -11,11 +11,15 @@ const db = new PrismaClient({ adapter });
 // signs in via Microsoft/Azure AD (password login is intentionally blocked
 // for org_owner) — an Admin row with this email and isActive=true is the
 // whole invite gate.
+const orgOwnerEmail = process.env.ORG_OWNER_EMAIL?.trim() || (process.env.NODE_ENV === "production"
+  ? (() => { throw new Error("ORG_OWNER_EMAIL is required when seeding production."); })()
+  : "owner@example.test");
+
 const ORG_OWNER = {
   id: "a0",
   name: "Mwebi Caleb",
   initials: "MC",
-  email: "mwebicaleb503@gmail.com",
+  email: orgOwnerEmail,
   role: "org_owner" as const,
   accountType: "organizational" as const,
 };

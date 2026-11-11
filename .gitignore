@@ -22,6 +22,8 @@ yarn-error.log*
 # local env files
 .env
 .env*.local
+.env.production
+.env.test
 
 # docker
 scheduler_pgdata/
