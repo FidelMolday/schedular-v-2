@@ -9,6 +9,7 @@
     "start": "prisma migrate deploy && node scripts/seed-if-empty.js && next start",
     "lint": "next lint",
     "seed": "npx prisma db seed",
+    "test": "node scripts/test-db-guard.cjs node --require ./scripts/test-tsx-preload.cjs --test tests/*.test.cjs",
     "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {
