@@ -2,6 +2,20 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
+// Tests and guarded local scripts must never inherit the production DATABASE_URL.
+if (process.env.NODE_ENV === "test" || process.env.SCHEDULER_TEST_DB_GUARD === "1") {
+  let testDbHost = "";
+  try {
+    testDbHost = new URL(process.env.DATABASE_URL ?? "").hostname.toLowerCase();
+  } catch {
+    throw new Error("Refusing test database access: DATABASE_URL is missing or invalid.");
+  }
+  if (!["localhost", "127.0.0.1", "::1"].includes(testDbHost) || testDbHost.endsWith(".neon.tech")) {
+    throw new Error(`Refusing test database host '${testDbHost}'. Only localhost/loopback is allowed.`);
+  }
+  console.log(`[test-db-guard] DATABASE_URL host: ${testDbHost}`);
+}
+
 // Pool size: default 20. pg's own default (10) is smaller than the tested
 // booking burst (20 concurrent), and because slot-lock waits are now bounded
 // (try-lock, see lib/data/bookings.ts) the pool drains quickly — 20 lets a

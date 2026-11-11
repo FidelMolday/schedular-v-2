@@ -12,6 +12,19 @@ const DATABASE_URL =
   process.env.DATABASE_URL ??
   "postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public";
 
+if (process.env.NODE_ENV === "test" || process.env.SCHEDULER_TEST_DB_GUARD === "1") {
+  let testDbHost = "";
+  try {
+    testDbHost = new URL(DATABASE_URL).hostname.toLowerCase();
+  } catch {
+    throw new Error("Refusing test Prisma command: DATABASE_URL is missing or invalid.");
+  }
+  if (!["localhost", "127.0.0.1", "::1"].includes(testDbHost) || testDbHost.endsWith(".neon.tech")) {
+    throw new Error(`Refusing test Prisma host '${testDbHost}'. Only localhost/loopback is allowed.`);
+  }
+  console.log(`[test-db-guard] DATABASE_URL host: ${testDbHost}`);
+}
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   datasource: {
