@@ -211,21 +211,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // the token's cached claims for its coarse redirect; every Node-runtime
       // page/API/action re-validates against the DB via this callback, so the
       // source of truth is always current wherever authorization is enforced.
-      if (token.sub && process.env.NEXT_RUNTIME !== "edge") {
+      if (process.env.NEXT_RUNTIME !== "edge") {
         const db = await getDb();
-        const admin = await db.admin.findUnique({
-          where: { id: token.sub },
-          select: { role: true, isActive: true },
-        });
-        if (admin) {
-          if (admin.role !== token.role) token.role = admin.role;
-          if (admin.isActive !== token.isActive) token.isActive = admin.isActive;
-        } else {
-          // Admin row no longer exists — drop any cached role so gates treat
-          // the token as unprivileged rather than trusting a stale claim.
-          delete token.role;
-          token.isActive = false;
-        }
+        const { refreshActiveAdminToken } = await import("@/lib/auth-session");
+        const refreshed = await refreshActiveAdminToken(token as any, db);
+        if (!refreshed) return null;
+        token = refreshed;
       }
 
       if (token.expires_at && Date.now() / 1000 > (token.expires_at as number)) {
@@ -235,12 +226,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.sub!;
-        (session.user as any).accountType = token.accountType ?? "unknown";
-        (session.user as any).role = token.role ?? "admin";
-      }
-      return session;
+      const { projectActiveAdminSession } = await import("@/lib/auth-session");
+      return projectActiveAdminSession(session, token as any) as any;
     },
   },
   trustHost: true,

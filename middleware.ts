@@ -35,7 +35,7 @@ const ADMIN_ONLY_ROUTES = [
 const adminAuth = auth((req) => {
   const { pathname } = req.nextUrl;
 
-  if (!req.auth) {
+  if (!req.auth || (req.auth.user as any)?.isActive !== true) {
     const signInUrl = new URL("/auth/signin", req.url);
     signInUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(signInUrl);
