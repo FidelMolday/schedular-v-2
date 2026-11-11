@@ -18,7 +18,7 @@ async function main() {
   console.log("=== TEST B: DISTINCT-ADDRESS REGRESSION ===");
   console.log("participant: calebmwebi@gmail.com (distinct)");
   console.log("admin: caleb@careerconnectionsltd.com (distinct, super_admin)");
-  console.log("owner: mwebicaleb503@gmail.com (distinct, org_owner -> super_admin)");
+  console.log("owner: owner@example.test (distinct, org_owner -> super_admin)");
   console.log();
 
   console.log("[check] All 3 emails confirmed distinct.");

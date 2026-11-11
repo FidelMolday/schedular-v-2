@@ -17,7 +17,7 @@ const OWNER_ADMIN_ID = "a0";
 const ADMIN_B_ID = "cmswyu0tp000031h7z8yrzg17";
 const TEST_DATE = "2026-09-15";
 
-const ownerEmail = "mwebicaleb503@gmail.com";
+const ownerEmail = "owner@example.test";
 const adminBEmail = "caleb@careerconnectionsltd.com";
 const participantDistinctEmail = "calebmwebi@gmail.com";
 
@@ -118,7 +118,7 @@ async function main() {
   // TEST A: Same-address scenario — participant=admin=owner, all same email
   // =========================================================================
   console.log("\n========================================================================");
-  console.log("TEST A: SAME-ADDRESS (participant = admin = owner = mwebicaleb503@gmail.com)");
+  console.log("TEST A: SAME-ADDRESS (participant = admin = owner = owner@example.test)");
   console.log("Expected after fix: 2 NotificationLog rows (1 per round × 1 deduped recipient)");
   console.log("Before fix: 4 rows (2 per round × 2 same-email recipients)");
   console.log("========================================================================\n");

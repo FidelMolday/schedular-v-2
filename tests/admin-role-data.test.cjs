@@ -17,7 +17,7 @@ test("team data-layer role actions enforce roles and expose inactive-actor behav
       data: {
         name: `Security Test ${label}`,
         initials: "ST",
-        email: `${label}.${suffix}@example.invalid`,
+        email: `${label}.${suffix}@example.test`,
         role,
         isActive,
       },

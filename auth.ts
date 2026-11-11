@@ -3,8 +3,10 @@ import AzureAD from "next-auth/providers/azure-ad";
 import Credentials from "next-auth/providers/credentials";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { headers } from "next/headers";
+import { azureTenantIssuer, requireAzureTenantId } from "@/lib/azure-tenant";
 
 const CONSUMER_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
+const AZURE_AD_TENANT_ID = requireAzureTenantId(process.env.AZURE_AD_TENANT_ID);
 
 let _adapter: ReturnType<typeof import("@/lib/auth-adapter").AdminPrismaAdapter> | null = null;
 
@@ -99,18 +101,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     AzureAD({
       clientId: process.env.AZURE_AD_CLIENT_ID!,
       clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
+      issuer: azureTenantIssuer(AZURE_AD_TENANT_ID),
       authorization: {
         params: {
           scope: "openid profile email offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/OnlineMeetings.ReadWrite",
         },
       },
-      // Deliberate tradeoff: Microsoft-verified emails only — Azure AD
-      // guarantees email ownership via the authenticated tid/oid claims,
-      // so linking an existing password-setup-created Admin row to this
-      // OAuth account on matching email is safe. This is NOT the same as
-      // allowing arbitrary unverified-provider linking (which we DO NOT
-      // enable elsewhere).
-      allowDangerousEmailAccountLinking: true,
+      // Email matching is used only by linkAzureAdminAccount for the first
+      // explicit link to an active invited row. Later sign-ins resolve by the
+      // providerAccountId, and Auth.js email linking remains disabled.
+      allowDangerousEmailAccountLinking: false,
     }),
     Credentials({
       name: "credentials",
@@ -156,20 +156,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Returning `false` makes @auth/core throw AccessDenied (which surfaces
     // as a redirect to pages.error) BEFORE the adapter's createUser/linkAccount
     // run, so an uninvited Microsoft account is never auto-provisioned.
-    async signIn({ user, account }: { user?: { email?: string | null } | null; account?: { provider?: string } | null }) {
+    async signIn({ user, account, profile }: { user?: { email?: string | null } | null; account?: any; profile?: any }) {
       if (account?.provider === "azure-ad") {
         const email = (user?.email ?? "").trim();
-        console.log(`[AUTH-DEBUG] signIn attempt: email="${email}" provider=${account.provider}`);
-        if (!email) { console.log("[AUTH-DEBUG] signIn ABORT: empty email"); return false; }
-        const { getAzureSignInGate } = await import("@/lib/data/auth-invite");
-        const gate = await getAzureSignInGate(email);
-        console.log(`[AUTH-DEBUG] signIn gate: invited=${gate.invited} deactivated=${gate.deactivated} email="${email}"`);
-        if (!gate.invited) { console.log(`[AUTH-DEBUG] signIn DENIED: email="${email}" not found in Admin table`); return false; }
+        const { linkAzureAdminAccount } = await import("@/lib/data/auth-invite");
+        const decision = await linkAzureAdminAccount({
+          expectedTenantId: AZURE_AD_TENANT_ID,
+          tenantId: profile?.tid,
+          email,
+          providerAccountId: account.providerAccountId,
+          account,
+        });
+        if (!decision.ok) {
+          if (decision.reason === "deactivated") return "/auth/error?error=account_deactivated";
+          return false;
+        }
         // A deactivated account is a real, known user hitting a real barrier —
         // redirect them to a specific message instead of the generic
         // AccessDenied (which is reserved for unknown emails to avoid leaking
         // who's invited).
-        if (gate.deactivated) return "/auth/error?error=account_deactivated";
         return true;
       }
       return true;
