@@ -501,6 +501,10 @@ export async function createBooking(input: {
   adminId?: string;
   sessionTypeId?: string;
 }): Promise<BookingResult> {
+  if (typeof input.participantName !== "string" || input.participantName.length === 0 || input.participantName.length > 200 || /[<>]/.test(input.participantName) ||
+      typeof input.participantEmail !== "string" || input.participantEmail.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(input.participantEmail)) {
+    return { ok: false, reason: "slot_full" };
+  }
   try {
     const result: BookingResult = await db.$transaction(
       async (tx): Promise<BookingResult> => {

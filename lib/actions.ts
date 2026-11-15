@@ -130,6 +130,12 @@ export async function createProjectAction(formData: {
   redirect("/admin/projects");
 }
 
+function isValidBookingParticipant(name: unknown, email: unknown): name is string {
+  return typeof name === "string" && name.length > 0 && name.length <= 200 && !/[<>]/.test(name) &&
+    typeof email === "string" && email.length <= 254 &&
+    /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email);
+}
+
 export async function confirmBookingAction(input: {
   projectId: string;
   dateKey: string;
@@ -143,7 +149,7 @@ export async function confirmBookingAction(input: {
   | { ok: true; adminName: string; meetingPlatform: string | null; zoomJoinUrl: string | null; teamsJoinUrl: string | null; meetingFallbackReason: string | null }
   | { ok: false; reason: "slot_full" | "no_admin_available" | "rate_limited" | "too_short_notice" | "admin_not_eligible" | "max_bookings_reached" }
 > {
-  if (!input.projectId || !input.participantEmail) {
+  if (!input.projectId || !isValidBookingParticipant(input.participantName, input.participantEmail)) {
     return { ok: false, reason: "slot_full" };
   }
   if (input.participantId) {

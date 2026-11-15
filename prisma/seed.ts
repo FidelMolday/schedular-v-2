@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { sanitizeTemplateHtml } from "../lib/template-utils";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -284,7 +285,7 @@ async function main() {
         where: { id: existing.id },
         data: {
           subject: t.subject,
-          bodyHtml: t.bodyHtml,
+          bodyHtml: sanitizeTemplateHtml(t.bodyHtml),
           version: existing.version + 1,
         },
       });
@@ -295,7 +296,7 @@ async function main() {
           audience: t.audience as any,
           projectId: null,
           subject: t.subject,
-          bodyHtml: t.bodyHtml,
+          bodyHtml: sanitizeTemplateHtml(t.bodyHtml),
           version: 1,
           isActive: true,
         },

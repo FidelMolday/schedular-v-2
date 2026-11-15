@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { createPasswordToken } from "@/lib/data/password-reset";
 import { logNotification } from "@/lib/data/notifications";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { escapeHtml } from "@/lib/template-utils";
 
 export async function POST(request: Request) {
   try {
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
         const resetUrl = `${baseUrl}/auth/reset-password/${rawToken}`;
 
+        const safeAdminName = escapeHtml(admin.name);
         const html = `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <tr><td style="padding:40px 20px;background-color:#f3f4f6;">
 <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background-color:#ffffff;border-radius:12px;overflow:hidden;">
@@ -37,7 +39,7 @@ export async function POST(request: Request) {
 <h1 style="margin:0;font-size:20px;font-weight:700;color:#111827;">Reset your password</h1>
 </td></tr>
 <tr><td style="padding:16px 32px;">
-<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${admin.name},</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${safeAdminName},</p>
 <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">
 We received a request to reset the password for your Scheduler account.
 </p>
@@ -83,6 +85,7 @@ Scheduler &mdash; Multi-project scheduling platform
         });
       } else {
         // No password yet — send guidance to check invite
+        const safeAdminName = escapeHtml(admin.name);
         const html = `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <tr><td style="padding:40px 20px;background-color:#f3f4f6;">
 <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background-color:#ffffff;border-radius:12px;overflow:hidden;">
@@ -90,7 +93,7 @@ Scheduler &mdash; Multi-project scheduling platform
 <h1 style="margin:0;font-size:20px;font-weight:700;color:#111827;">Password setup required</h1>
 </td></tr>
 <tr><td style="padding:16px 32px;">
-<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${admin.name},</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${safeAdminName},</p>
 <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">
 Your Scheduler account has not been activated yet. You&rsquo;ll need to use the setup link from your original invitation email to create a password.
 </p>

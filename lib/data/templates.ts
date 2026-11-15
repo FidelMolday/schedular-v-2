@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { recordAudit } from "@/lib/data/audit";
 import type { EmailCategory, EmailAudience, Prisma } from "@prisma/client";
-import type { EmailTemplateWithDefault } from "@/lib/template-utils";
+import { sanitizeTemplateHtml, type EmailTemplateWithDefault } from "@/lib/template-utils";
 
 export type { EmailTemplateWithDefault };
 export { PLACEHOLDER_TOKENS, MOCK_PREVIEW_CONTEXT, renderTemplate } from "@/lib/template-utils";
@@ -150,7 +150,7 @@ export async function createTemplateVersion(input: {
         audience: input.audience,
         projectId: input.projectId ?? null,
         subject: input.subject,
-        bodyHtml: input.bodyHtml,
+        bodyHtml: sanitizeTemplateHtml(input.bodyHtml),
         version: nextVersion,
         isActive: true,
       },

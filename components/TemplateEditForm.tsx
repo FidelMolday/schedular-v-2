@@ -215,7 +215,7 @@ export default function TemplateEditForm({
                   <div className="px-4 py-3 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide dark:border-gray-700 dark:text-gray-400">
                     Preview — Subject: {renderedPreview.subject}
                   </div>
-                  <div className="p-4" dangerouslySetInnerHTML={{ __html: renderedPreview.bodyHtml }} />
+                  <iframe title="Template preview" sandbox="" srcDoc={renderedPreview.bodyHtml} className="w-full min-h-[320px] overflow-auto border-0" />
                 </div>
               )}
 
