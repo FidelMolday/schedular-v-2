@@ -70,7 +70,9 @@ export function getClientIp(requestHeaders: Headers): string {
   const clientIp = selected || realIp || "unknown";
 
   if (process.env.RATE_LIMIT_DEBUG === "1") {
-    console.info(`[rate-limit] xff_entries=${forwarded.length} selected_ip=${maskedIp(clientIp)}`);
+    const maskedEntries = forwarded.map(maskedIp);
+    const selectedIndex = selected ? forwarded.length - hops : -1;
+    console.info(`[rate-limit] xff_entries=${JSON.stringify(maskedEntries)} trusted_proxy_hops=${hops} selected_index=${selectedIndex} selected_ip=${maskedIp(clientIp)}`);
   }
   return clientIp;
 }

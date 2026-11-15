@@ -41,6 +41,23 @@ test("trusted hop count, fallback, and debug output use the configured selection
     delete process.env.TRUSTED_PROXY_HOPS;
   }
   assert.equal(logged.length, 1);
-  assert.match(logged[0], /xff_entries=3 selected_ip=198\.51\.100\.0/);
+  assert.match(logged[0], /xff_entries=\["192\.0\.2\.0","198\.51\.100\.0","203\.0\.113\.0"\] trusted_proxy_hops=2 selected_index=1 selected_ip=198\.51\.100\.0/);
   assert.doesNotMatch(logged[0], /198\.51\.100\.8|203\.0\.113\.21|192\.0\.2\.5/);
+});
+
+test("debug masks every IPv4 and IPv6 forwarded entry", () => {
+  process.env.RATE_LIMIT_DEBUG = "1";
+  process.env.TRUSTED_PROXY_HOPS = "1";
+  const logged = [];
+  const originalInfo = console.info;
+  console.info = (line) => logged.push(line);
+  try {
+    getClientIp(new Headers({ "x-forwarded-for": "192.0.2.123, 2001:db8:abcd:1234::9" }));
+  } finally {
+    console.info = originalInfo;
+    delete process.env.RATE_LIMIT_DEBUG;
+    delete process.env.TRUSTED_PROXY_HOPS;
+  }
+  assert.match(logged[0], /\["192\.0\.2\.0","2001:db8:abcd:1234:…"\]/);
+  assert.doesNotMatch(logged[0], /192\.0\.2\.123|2001:db8:abcd:1234::9/);
 });

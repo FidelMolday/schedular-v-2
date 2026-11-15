@@ -13,7 +13,7 @@ export async function GET(
 
   const def = REPORT_DEFINITIONS.find((d) => d.slug === type);
   if (!def) {
-    return NextResponse.json({ error: `Unknown report type: ${type}` }, { status: 404 });
+    return NextResponse.json({ error: "Unknown report type" }, { status: 404 });
   }
 
   const actor = await requireActiveSession(() => null);
@@ -58,6 +58,7 @@ export async function GET(
     // Default: JSON
     return NextResponse.json(rows);
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[reports] report generation failed:", err);
+    return NextResponse.json({ error: "Failed to generate report" }, { status: 500 });
   }
 }

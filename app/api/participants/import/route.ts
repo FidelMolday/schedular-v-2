@@ -73,8 +73,9 @@ export async function POST(req: NextRequest) {
     const result = await bulkImportParticipants(project.id, rows);
     return NextResponse.json(result);
   } catch (err) {
+    console.error("[participants/import] failed to parse or import workbook:", err);
     return NextResponse.json(
-      { error: `Failed to parse file: ${err instanceof Error ? err.message : String(err)}` },
+      { error: "Failed to parse file" },
       { status: 400 }
     );
   }

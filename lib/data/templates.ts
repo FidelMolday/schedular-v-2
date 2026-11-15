@@ -124,6 +124,7 @@ export async function createTemplateVersion(input: {
   projectId: string | null;
   subject: string;
   bodyHtml: string;
+  actor?: { id: string; name: string };
 }): Promise<Prisma.EmailTemplateGetPayload<{}>> {
   const result = await db.$transaction(async (tx) => {
     const currentActive = await tx.emailTemplate.findFirst({
@@ -162,8 +163,9 @@ export async function createTemplateVersion(input: {
   // Audit: non-blocking, outside transaction
   recordAudit({
     action: result.version === 1 ? "template_created" : "template_updated",
-    actorType: "super_admin",
-    actorLabel: "Unknown (auth not yet wired)", // TODO: replace with session.user once auth lands
+    actorType: "admin",
+    actorId: input.actor?.id,
+    actorLabel: input.actor?.name ?? "System",
     entityType: "EmailTemplate",
     entityId: result.id,
     projectId: result.projectId ?? undefined,

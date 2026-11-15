@@ -59,6 +59,13 @@ test("inactive and missing admins get generic reset/setup responses; active toke
     const activeGet = await setupRoute.GET(new Request(`http://localhost/api/auth/setup-password?token=${activeRaw}`));
     const activeGetBody = await activeGet.json();
     assert.equal(activeGetBody.valid, true);
+    const shortPassword = await setupRoute.POST(new Request("http://localhost/api/auth/setup-password", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: activeRaw, password: "Short-123" }),
+    }));
+    const shortBody = await shortPassword.json();
+    console.log("RAW setup POST short password:", JSON.stringify({ status: shortPassword.status, body: shortBody }));
+    assert.equal(shortPassword.status, 400);
+    assert.match(shortBody.error, /at least 12 characters/);
     const activePost = await setupRoute.POST(new Request("http://localhost/api/auth/setup-password", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: activeRaw, password: "A-strong-test-password-123" }),
     }));
