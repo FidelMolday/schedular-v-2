@@ -1,16 +1,15 @@
-import { auth } from "@/auth";
+import { requireActiveSession } from "@/lib/authz";
 import { NextRequest, NextResponse } from "next/server";
 import { getCalendarEvents } from "@/lib/data/dashboard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const actor = await requireActiveSession(() => null);
+  if (!actor || !("id" in actor)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const role = (session.user as any)?.role;
-  const ownerId = role === "org_owner" ? undefined : session.user.id;
+  const ownerId = actor.role === "org_owner" ? undefined : actor.id;
 
   const params = request.nextUrl.searchParams;
   const from = params.get("from");

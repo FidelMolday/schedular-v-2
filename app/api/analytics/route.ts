@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { requireActiveSession } from "@/lib/authz";
 import {
   getAdminUtilizationChart,
   getBookingVolumeTrend,
@@ -24,15 +24,14 @@ function daysAgoISO(n: number): string {
 }
 
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const actor = await requireActiveSession(() => null);
+  if (!actor || !("id" in actor)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   // Same scoping as the rest of the app: org_owner sees all projects;
   // admin / super_admin see only the projects they own.
-  const role = (session.user as any)?.role;
-  const ownerId = role === "org_owner" ? undefined : session.user.id;
+  const ownerId = actor.role === "org_owner" ? undefined : actor.id;
 
   const url = new URL(request.url);
   const fromRaw = url.searchParams.get("from") ?? daysAgoISO(DEFAULT_RANGE_DAYS);

@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { requireActiveSession } from "@/lib/authz";
 import { NextResponse } from "next/server";
 import { generateReport, REPORT_DEFINITIONS } from "@/lib/data/reports";
 
@@ -15,13 +15,13 @@ export async function GET(
     return NextResponse.json({ error: `Unknown report type: ${type}` }, { status: 404 });
   }
 
+  const actor = await requireActiveSession(() => null);
+  if (!actor || !("id" in actor)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const role = (session.user as any)?.role;
-    const ownerId = role === "org_owner" ? undefined : session.user.id;
+    const ownerId = actor.role === "org_owner" ? undefined : actor.id;
     const rows = await generateReport(type, ownerId);
 
     if (format === "csv") {

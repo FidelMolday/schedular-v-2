@@ -29,6 +29,7 @@ type Project = {
 
 export default function ManageBooking({
   booking,
+  manageToken,
   project,
   availability,
   inPast,
@@ -38,6 +39,7 @@ export default function ManageBooking({
   lockedAdminHasNoSlots,
 }: {
   booking: Booking;
+  manageToken: string;
   project: Project;
   availability: Record<string, string[]>;
   inPast: boolean;
@@ -55,15 +57,11 @@ export default function ManageBooking({
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [rescheduledNotice, setRescheduledNotice] = useState(showRescheduleBanner);
 
-  // The participant email arrives server-verified via the signed manage token
-  // (see page.tsx); the actions below still verify it server-side as defense-in-depth.
-  const participantEmail = booking.participantEmail;
-
   const handleCancel = useCallback(async () => {
     setCancelling(true);
     setMessage(null);
     try {
-      await participantCancelAction(booking.id, participantEmail);
+      await participantCancelAction(booking.id, manageToken);
       setMessage({ type: "success", text: "Your booking has been cancelled." });
       router.refresh();
     } catch (err: any) {
@@ -72,7 +70,7 @@ export default function ManageBooking({
       setCancelling(false);
       setShowConfirmCancel(false);
     }
-  }, [booking.id, participantEmail, router]);
+  }, [booking.id, manageToken, router]);
 
   const handleReschedule = useCallback(async () => {
     if (!selectedDateKey || !selectedTime) return;
@@ -80,7 +78,7 @@ export default function ManageBooking({
     setMessage(null);
     setRescheduledNotice(false);
     try {
-      const result = await participantRescheduleAction(booking.id, selectedDateKey, selectedTime, participantEmail);
+      const result = await participantRescheduleAction(booking.id, selectedDateKey, selectedTime, manageToken);
       if (result.ok) {
         router.replace(`/manage/${result.newBookingId}?token=${result.token}&rescheduled=1`);
       } else {
@@ -99,7 +97,7 @@ export default function ManageBooking({
     } finally {
       setRescheduling(false);
     }
-  }, [booking.id, selectedDateKey, selectedTime, participantEmail, router]);
+  }, [booking.id, selectedDateKey, selectedTime, manageToken, router]);
 
   const formatHoursLeft = hoursLeft > 0
     ? `${Math.floor(hoursLeft)}h${Math.floor((hoursLeft % 1) * 60) > 0 ? ` ${Math.floor((hoursLeft % 1) * 60)}m` : ""}`

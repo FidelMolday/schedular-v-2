@@ -63,11 +63,11 @@ test("team data-layer role actions enforce roles and expose inactive-actor behav
       deactivateAdmin: await deactivateAdmin(inactiveOwnerActors[2].id, inactiveTargets[2].id),
       reactivateAdmin: await reactivateAdmin(inactiveOwnerActors[3].id, inactiveTargets[3].id),
     };
-    console.log("RAW deactivated org_owner results:", JSON.stringify(inactiveOwnerResults));
-    assert.equal(inactiveOwnerResults.changeAdminRole.ok, true);
-    assert.equal(inactiveOwnerResults.promoteToOrgOwner.ok, true);
-    assert.equal(inactiveOwnerResults.deactivateAdmin.ok, true);
-    assert.equal(inactiveOwnerResults.reactivateAdmin.ok, true);
+    console.log("RAW deactivated org_owner results (expected rejection):", JSON.stringify(inactiveOwnerResults));
+    assert.deepEqual(inactiveOwnerResults.changeAdminRole, { ok: false, reason: "not_allowed" });
+    assert.deepEqual(inactiveOwnerResults.promoteToOrgOwner, { ok: false, reason: "not_org_owner" });
+    assert.deepEqual(inactiveOwnerResults.deactivateAdmin, { ok: false, reason: "not_authorized" });
+    assert.deepEqual(inactiveOwnerResults.reactivateAdmin, { ok: false, reason: "not_authorized" });
 
     const activeOwners = await Promise.all([
       addAdmin("active-owner-change", "org_owner"),

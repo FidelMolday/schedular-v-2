@@ -12,14 +12,46 @@ import { createVerificationPin, verifyPin } from "@/lib/pin";
 import { getActiveTemplate } from "@/lib/data/templates";
 import { renderTemplate } from "@/lib/template-utils";
 import { Resend } from "resend";
+import { auth } from "@/auth";
+import { requireActiveSession, requireBookingAccess } from "@/lib/authz";
+import { verifyManageToken } from "@/lib/manage-token";
 
 const PIN_FROM = process.env.EMAIL_FROM ?? "Scheduler <onboarding@resend.dev>";
 
 async function getBookingWithProject(bookingId: string) {
   return db.booking.findUnique({
     where: { id: bookingId },
-    select: { dateKey: true, time: true, participantEmail: true, project: { select: { timezone: true, selfServiceWindowHours: true } } },
+    select: { id: true, adminId: true, projectId: true, dateKey: true, time: true, participantEmail: true, project: { select: { timezone: true, selfServiceWindowHours: true } } },
   });
+}
+
+async function authorizeManageMutation(bookingId: string, token?: string) {
+  const booking = await getBookingWithProject(bookingId);
+  if (!booking) throw new Error("Booking not found");
+
+  if (token) {
+    const verified = verifyManageToken(token);
+    if (!verified || verified.bookingId !== bookingId) throw new Error("Unauthorized");
+    if (verified.scope === "p") {
+      if (verified.email !== booking.participantEmail.toLowerCase().trim()) throw new Error("Unauthorized");
+      return { booking, actorType: "participant" as const, actorLabel: "Self-service" };
+    }
+
+    const actor = await requireActiveSession(() => null);
+    if (!actor || !("id" in actor)) throw new Error("Unauthorized");
+    const admin = await db.admin.findUnique({ where: { id: actor.id }, select: { email: true } });
+    if (!admin || verified.email !== admin.email.toLowerCase().trim()) throw new Error("Unauthorized");
+    const access = await requireBookingAccess(actor, bookingId, () => null);
+    if (!access || !("id" in access)) throw new Error("Forbidden");
+    return { booking, actorType: "admin" as const, actorLabel: admin.email };
+  }
+
+  const actor = await requireActiveSession(() => null);
+  if (!actor || !("id" in actor)) throw new Error("Unauthorized");
+  const access = await requireBookingAccess(actor, bookingId, () => null);
+  if (!access || !("id" in access)) throw new Error("Forbidden");
+  const admin = await db.admin.findUnique({ where: { id: actor.id }, select: { email: true } });
+  return { booking, actorType: "admin" as const, actorLabel: admin?.email ?? actor.id };
 }
 
 async function assertSelfServiceWindow(bookingId: string) {
@@ -137,26 +169,17 @@ export async function verifyManagePin(
   return { verified: true, token: signManageToken(bookingId, booking.participantEmail) };
 }
 
-export async function participantCancelAction(bookingId: string, participantEmail?: string) {
+export async function participantCancelAction(bookingId: string, token?: string) {
   const hdrs = await headers();
   const ip = getClientIp(hdrs);
   if (!checkRateLimit(`manage-cancel:${ip}`, 5, 15 * 60 * 1000)) {
     throw new Error("Too many requests. Please try again later.");
   }
 
-  // Verify email matches (defense-in-depth — client gate is primary, this is server-side enforcement)
-  if (participantEmail) {
-    const booking = await db.booking.findUnique({
-      where: { id: bookingId },
-      select: { participantEmail: true },
-    });
-    if (!booking || booking.participantEmail.toLowerCase().trim() !== participantEmail.toLowerCase().trim()) {
-      throw new Error("Unauthorized — email verification required.");
-    }
-  }
+  const access = await authorizeManageMutation(bookingId, token);
 
   await assertSelfServiceWindow(bookingId);
-  await cancelBooking(bookingId, { actorType: "participant", actorLabel: "Self-service" });
+  await cancelBooking(bookingId, { actorType: access.actorType, actorLabel: access.actorLabel });
   try {
     revalidatePath(`/manage/${bookingId}`);
   } catch (err) {
@@ -168,7 +191,7 @@ export async function participantRescheduleAction(
   bookingId: string,
   newDateKey: string,
   newTime: string,
-  participantEmail?: string
+  token?: string
 ): Promise<{ ok: true; newBookingId: string; token: string } | { ok: false; reason: string }> {
   const hdrs = await headers();
   const ip = getClientIp(hdrs);
@@ -176,15 +199,11 @@ export async function participantRescheduleAction(
     throw new Error("Too many requests. Please try again later.");
   }
 
-  // Verify email matches
-  if (participantEmail) {
-    const booking = await db.booking.findUnique({
-      where: { id: bookingId },
-      select: { participantEmail: true },
-    });
-    if (!booking || booking.participantEmail.toLowerCase().trim() !== participantEmail.toLowerCase().trim()) {
-      return { ok: false, reason: "Unauthorized — email verification required." };
-    }
+  let access: Awaited<ReturnType<typeof authorizeManageMutation>>;
+  try {
+    access = await authorizeManageMutation(bookingId, token);
+  } catch {
+    return { ok: false, reason: "Unauthorized — email verification required." };
   }
 
   await assertSelfServiceWindow(bookingId);
@@ -198,7 +217,7 @@ export async function participantRescheduleAction(
 
   const result = await rescheduleBookingTime(bookingId, newDateKey, newTime, {
     keepSameAdminIfPossible: keepSameAdmin,
-    actor: { actorType: "participant", actorLabel: "Self-service" },
+    actor: { actorType: access.actorType, actorLabel: access.actorLabel },
   });
   if (result.ok) {
     const newBooking = await db.booking.findUnique({

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { requireActiveSession } from "@/lib/authz";
 import { getAdminRanges } from "@/lib/data/availability-ranges";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const actor = await requireActiveSession(() => null);
+  if (!actor || !("id" in actor)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -17,6 +17,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "fromDate and toDate are required" }, { status: 400 });
   }
 
-  const ranges = await getAdminRanges(session.user.id, fromDate, toDate);
+  const ranges = await getAdminRanges(actor.id, fromDate, toDate);
   return NextResponse.json(ranges);
 }

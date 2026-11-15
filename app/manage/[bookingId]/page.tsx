@@ -94,6 +94,7 @@ export default async function ManagePage({
         zoomJoinUrl: booking.zoomJoinUrl,
         meetingFallbackReason: booking.meetingFallbackReason,
       }}
+      manageToken={token!}
       project={{
         name: project.name,
         company: project.company,

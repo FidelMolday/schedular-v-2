@@ -1,12 +1,11 @@
-import { auth } from "@/auth";
-import { isOrgOwner, isSuperAdmin } from "@/lib/authz";
+import { requireActiveSession } from "@/lib/authz";
 import { getOwnerGraphStatus } from "@/lib/graph/tokens";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const actor = await requireActiveSession(() => null);
+  if (!actor || !("id" in actor)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -18,8 +17,7 @@ export async function GET(request: Request) {
 
   // Scope: admins can only check their own graph status;
   // super_admin and org_owner can check any admin's.
-  const role = (session.user as any)?.role;
-  if (!isOrgOwner(role) && !isSuperAdmin(role) && session.user.id !== adminId) {
+  if (actor.role !== "org_owner" && actor.role !== "super_admin" && actor.id !== adminId) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 

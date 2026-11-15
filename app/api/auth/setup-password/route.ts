@@ -18,10 +18,10 @@ export async function GET(request: Request) {
 
   const resetToken = await db.passwordResetToken.findUnique({
     where: { token: hashToken(rawToken) },
-    include: { admin: { select: { name: true, email: true } } },
+    include: { admin: { select: { name: true, email: true, isActive: true } } },
   });
 
-  if (!resetToken) {
+  if (!resetToken || !resetToken.admin.isActive) {
     return NextResponse.json({ valid: false, error: "Invalid setup link." }, { status: 200 });
   }
 
@@ -62,6 +62,12 @@ export async function POST(request: Request) {
     });
 
     if (!resetToken) {
+      return NextResponse.json({ error: "Invalid or expired setup link." }, { status: 404 });
+    }
+
+    // A token for an inactive or deleted admin is indistinguishable from an
+    // invalid token and cannot be used to set a password.
+    if (!resetToken.admin?.isActive) {
       return NextResponse.json({ error: "Invalid or expired setup link." }, { status: 404 });
     }
 

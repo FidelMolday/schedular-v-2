@@ -1,14 +1,13 @@
-import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { isOrgOwner, isSuperAdmin } from "@/lib/authz";
+import { requireActiveSession } from "@/lib/authz";
 import { getAdminDashboardData } from "@/lib/data/dashboard";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const actor = await requireActiveSession(() => null);
+  if (!actor || !("id" in actor)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -21,17 +20,16 @@ export async function GET(request: NextRequest) {
   // org_owner can view any admin's dashboard; super_admin can view any admin's
   // dashboard but only sees data scoped to their own projects.
   // Mirrors the dashboard page logic at app/admin/dashboard/page.tsx:51.
-  const role = (session.user as any)?.role;
-  const isSelf = session.user.id === adminId;
-  if (!isOrgOwner(role) && !isSuperAdmin(role) && !isSelf) {
+  const isSelf = actor.id === adminId;
+  if (actor.role !== "org_owner" && actor.role !== "super_admin" && !isSelf) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // super_admin viewing another admin's dashboard: must be assigned to one of
   // the super_admin's own projects to be in scope (data is ownerId-scoped).
-  if (isSuperAdmin(role) && !isSelf) {
+  if (actor.role === "super_admin" && !isSelf) {
     const inScope = await db.projectAdmin.findFirst({
-      where: { adminId, project: { ownerId: session.user.id } },
+      where: { adminId, project: { ownerId: actor.id } },
       select: { id: true },
     });
     if (!inScope) {
@@ -40,7 +38,7 @@ export async function GET(request: NextRequest) {
   }
 
   const data = await getAdminDashboardData(adminId, {
-    ownerId: isSuperAdmin(role) ? session.user.id : undefined,
+    ownerId: actor.role === "super_admin" ? actor.id : undefined,
     // Self-dashboards include owned-but-not-assigned projects so the list
     // matches the Projects page (owner rule). Plain admins own nothing, so
     // this is a no-op for them.

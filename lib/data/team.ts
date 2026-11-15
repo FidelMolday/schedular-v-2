@@ -70,9 +70,9 @@ export async function changeAdminRole(
 > {
   const actor = await db.admin.findUnique({
     where: { id: actorAdminId },
-    select: { role: true, name: true, email: true },
+    select: { role: true, name: true, email: true, isActive: true },
   });
-  if (!actor || (actor.role !== "org_owner" && actor.role !== "super_admin")) {
+  if (!actor || !actor.isActive || (actor.role !== "org_owner" && actor.role !== "super_admin")) {
     return { ok: false, reason: "not_allowed" };
   }
 
@@ -143,9 +143,9 @@ export async function promoteToOrgOwner(
 > {
   const actor = await db.admin.findUnique({
     where: { id: actorAdminId },
-    select: { id: true, role: true, name: true, email: true },
+    select: { id: true, role: true, name: true, email: true, isActive: true },
   });
-  if (!actor || actor.role !== "org_owner") {
+  if (!actor || !actor.isActive || actor.role !== "org_owner") {
     return { ok: false, reason: "not_org_owner" };
   }
 
@@ -246,9 +246,9 @@ export async function deactivateAdmin(
 ): Promise<DeactivateResult> {
   const actor = await db.admin.findUnique({
     where: { id: actorAdminId },
-    select: { id: true, role: true, name: true, email: true },
+    select: { id: true, role: true, name: true, email: true, isActive: true },
   });
-  if (!actor || (actor.role !== "org_owner" && actor.role !== "super_admin")) {
+  if (!actor || !actor.isActive || (actor.role !== "org_owner" && actor.role !== "super_admin")) {
     return { ok: false, reason: "not_authorized" };
   }
 
@@ -354,9 +354,9 @@ export async function reactivateAdmin(
 ): Promise<ReactivateResult> {
   const actor = await db.admin.findUnique({
     where: { id: actorAdminId },
-    select: { id: true, role: true, name: true, email: true },
+    select: { id: true, role: true, name: true, email: true, isActive: true },
   });
-  if (!actor || (actor.role !== "org_owner" && actor.role !== "super_admin")) {
+  if (!actor || !actor.isActive || (actor.role !== "org_owner" && actor.role !== "super_admin")) {
     return { ok: false, reason: "not_authorized" };
   }
 

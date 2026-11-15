@@ -6,7 +6,9 @@ import { claimWaitlistOfferAction } from "@/lib/actions";
 
 export default function ClaimOffer({
   entry,
+  claimToken,
 }: {
+  claimToken: string;
   entry: {
     id: string;
     name: string;
@@ -38,7 +40,7 @@ export default function ClaimOffer({
 
   const handleClaim = async () => {
     setState("claiming");
-    const result = await claimWaitlistOfferAction(entry.id);
+    const result = await claimWaitlistOfferAction(entry.id, claimToken);
     if (result.ok) {
       setState("claimed");
     } else {

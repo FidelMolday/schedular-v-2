@@ -21,7 +21,9 @@ export async function POST(request: Request) {
 
     const admin = await db.admin.findUnique({ where: { email: email.toLowerCase().trim() } });
 
-    if (admin) {
+    // Unknown and inactive addresses share the same generic success response;
+    // only active accounts receive a reset/setup email.
+    if (admin?.isActive) {
       if (admin.passwordHash) {
         // Real reset — send a password reset email
         const { rawToken } = await createPasswordToken(admin.id);

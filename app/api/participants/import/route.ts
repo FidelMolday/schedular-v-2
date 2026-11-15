@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import ExcelJS from "exceljs";
 import { bulkImportParticipants } from "@/lib/data/participants";
-import { canManageProject } from "@/lib/authz";
+import { requireActiveSession, requireProjectAccess } from "@/lib/authz";
 import { getProjectBySlug } from "@/lib/data/projects";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const actor = await requireActiveSession(() => null);
+  if (!actor || !("id" in actor)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -24,8 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const user = { id: session.user.id, role: (session.user as any).role as "admin" | "super_admin" | "org_owner" };
-  if (!canManageProject(user, project)) {
+  if (!await requireProjectAccess(actor, project.id, () => null)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

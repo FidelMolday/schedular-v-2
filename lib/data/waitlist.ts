@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { db } from "@/lib/db";
+import { db, isSerializationConflict } from "@/lib/db";
 import { recordAudit } from "@/lib/data/audit";
 import { getActiveTemplate, renderTemplate } from "@/lib/data/templates";
 import { logNotification } from "@/lib/data/notifications";
@@ -8,6 +8,7 @@ import { createBooking } from "@/lib/data/bookings";
 import { log } from "@/lib/log";
 import { sendIntegrationFailureAlert } from "@/lib/data/monitoring-alerts";
 import type { Prisma } from "@prisma/client";
+import { signWaitlistClaimToken } from "@/lib/waitlist-claim-token";
 
 const NOTIFICATION_FROM = process.env.EMAIL_FROM ?? "Scheduler <notifications@eureka-ent.org>";
 
@@ -137,6 +138,8 @@ export async function offerNextWaitlistEntry(
 
   if (!entry) return null;
 
+  const offerExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const claimToken = signWaitlistClaimToken(entry.id, offerExpiresAt);
   const updated = await db.waitlistEntry.update({
     where: { id: entry.id },
     data: {
@@ -144,7 +147,7 @@ export async function offerNextWaitlistEntry(
       dateKey,
       time: time,
       offeredAt: new Date(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      expiresAt: offerExpiresAt,
     },
   });
 
@@ -157,7 +160,7 @@ export async function offerNextWaitlistEntry(
       company_name: project?.company ?? "",
       session_date: dateKey,
       session_time: time,
-      booking_link: `${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/waitlist/claim/${entry.id}`,
+      booking_link: `${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/waitlist/claim/${entry.id}?token=${encodeURIComponent(claimToken)}`,
       company_logo: "",
       admin_name: "",
       time_zone: "",
@@ -235,37 +238,63 @@ export async function offerNextWaitlistEntry(
   return updated;
 }
 
-export async function claimWaitlistOffer(entryId: string) {
-  const entry = await db.waitlistEntry.findUnique({ where: { id: entryId } });
-  if (!entry || entry.status !== "offered") {
-    return { ok: false as const, reason: "offer_expired" as const };
+export async function claimWaitlistOffer(entryId: string, tokenExpiresAtMs: number) {
+  const now = new Date();
+  let entry;
+  try {
+    entry = await db.$transaction(async (tx) => {
+      const current = await tx.waitlistEntry.findUnique({ where: { id: entryId } });
+      if (!current || current.status !== "offered" || !current.expiresAt) return null;
+      if (current.expiresAt.getTime() !== tokenExpiresAtMs || current.expiresAt <= now) {
+        if (current.expiresAt <= now) {
+          await tx.waitlistEntry.updateMany({ where: { id: entryId, status: "offered" }, data: { status: "expired" } });
+        }
+        return null;
+      }
+
+      // Reserve the one-shot offer inside the transaction before creating a
+      // booking. A concurrent claim sees the changed status and cannot proceed.
+      const reserved = await tx.waitlistEntry.updateMany({
+        where: { id: entryId, status: "offered", expiresAt: current.expiresAt },
+        data: { status: "claimed" },
+      });
+      return reserved.count === 1 ? current : null;
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (!isSerializationConflict(error)) throw error;
+    entry = null;
   }
 
-  if (entry.expiresAt && new Date() > entry.expiresAt) {
-    await db.waitlistEntry.update({
-      where: { id: entryId },
-      data: { status: "expired" },
-    });
-    return { ok: false as const, reason: "offer_expired" as const };
-  }
+  if (!entry) return { ok: false as const, reason: "offer_expired" as const };
 
   if (!entry.dateKey || !entry.time) {
+    await db.waitlistEntry.updateMany({ where: { id: entryId, status: "claimed", claimedBookingId: null }, data: { status: "offered" } });
     return { ok: false as const, reason: "offer_expired" as const };
   }
 
-  const result = await createBooking({
-    projectId: entry.projectId,
-    dateKey: entry.dateKey,
-    time: entry.time,
-    participantName: entry.name,
-    participantEmail: entry.email,
-  });
+  let result;
+  try {
+    result = await createBooking({
+      projectId: entry.projectId,
+      dateKey: entry.dateKey,
+      time: entry.time,
+      participantName: entry.name,
+      participantEmail: entry.email,
+    });
+  } catch (error) {
+    await db.waitlistEntry.updateMany({ where: { id: entryId, status: "claimed", claimedBookingId: null }, data: { status: "offered" } });
+    throw error;
+  }
 
   if (result.ok) {
-    await db.waitlistEntry.update({
-      where: { id: entryId },
+    await db.waitlistEntry.updateMany({
+      where: { id: entryId, status: "claimed", claimedBookingId: null },
       data: { status: "claimed", claimedBookingId: result.booking.id },
     });
+  } else if (result.reason === "slot_full") {
+    await db.waitlistEntry.updateMany({ where: { id: entryId, status: "claimed", claimedBookingId: null }, data: { status: "expired" } });
+  } else {
+    await db.waitlistEntry.updateMany({ where: { id: entryId, status: "claimed", claimedBookingId: null }, data: { status: "offered" } });
   }
 
   return result;
