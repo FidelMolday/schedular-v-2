@@ -13,16 +13,24 @@ test("waitlist claim action rejects tampered, expired, wrong-entry, and wrong-pu
   assert.equal(verifyWaitlistClaimToken(good, "entry-2"), null);
 
   const [encoded, signature] = good.split(".");
+  const replaceMiddleBase64UrlCharacter = (segment) => {
+    const index = Math.floor(segment.length / 2);
+    const replacement = segment[index] === "A" ? "B" : "A";
+    return `${segment.slice(0, index)}${replacement}${segment.slice(index + 1)}`;
+  };
   const changedPurpose = Buffer.from(encoded, "base64url").toString("utf8").replace("waitlist-claim-v1", "manage-token-v1");
   const wrongPurpose = `${Buffer.from(changedPurpose).toString("base64url")}.${signature}`;
   assert.equal(verifyWaitlistClaimToken(wrongPurpose), null);
-  const tampered = `${encoded}.${signature.slice(0, -1)}x`;
+  const tamperedSignature = `${encoded}.${replaceMiddleBase64UrlCharacter(signature)}`;
+  const tamperedPayload = `${replaceMiddleBase64UrlCharacter(encoded)}.${signature}`;
   const expired = signWaitlistClaimToken("entry-1", new Date(Date.now() - 1));
-  assert.equal(verifyWaitlistClaimToken(tampered), null);
+  assert.equal(verifyWaitlistClaimToken(tamperedSignature), null);
+  assert.equal(verifyWaitlistClaimToken(tamperedPayload), null);
   assert.equal(verifyWaitlistClaimToken(expired), null);
 
   const denials = {
-    tampered: await claimWaitlistOfferAction("entry-1", tampered),
+    tamperedSignature: await claimWaitlistOfferAction("entry-1", tamperedSignature),
+    tamperedPayload: await claimWaitlistOfferAction("entry-1", tamperedPayload),
     expired: await claimWaitlistOfferAction("entry-1", expired),
     wrongEntry: await claimWaitlistOfferAction("entry-2", good),
     wrongPurpose: await claimWaitlistOfferAction("entry-1", wrongPurpose),
