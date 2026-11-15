@@ -16,12 +16,13 @@ const matrix = (globalThis.__AUTH_MATRIX__ = {
   redirectTarget: null,
   emailSends: [],
 });
+const headersModule = { headers: async () => new Headers(matrix.headerValues), cookies: async () => new Map() };
 Module._load = function (request, parent, isMain) {
   if (request === "@/auth") {
     return { auth: async () => matrix.session, handlers: { GET() {}, POST() {} } };
   }
   if (request === "next/headers") {
-    return { headers: async () => new Headers(matrix.headerValues), cookies: async () => new Map() };
+    return headersModule;
   }
   if (request === "next/cache") {
     return { revalidatePath: (path) => matrix.revalidatedPaths.push(path), revalidateTag: () => {} };

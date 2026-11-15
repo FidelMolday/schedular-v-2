@@ -76,13 +76,39 @@ function argsFor(name, f, user, suffix) {
   }
 }
 
+function isAuthorizationDenial(outcome) {
+  const errorText = String(outcome.error ?? "").toLowerCase();
+  const value = outcome.value;
+  const reason = typeof value?.reason === "string" ? value.reason.toLowerCase() : "";
+  return /\bunauthori[sz]ed\b|\bforbidden\b/.test(errorText)
+    || value?.status === 401 || value?.status === 403
+    || ["unauthorized", "forbidden", "not_allowed", "not_authorized", "not_org_owner", "not_assigned"].includes(reason);
+}
+
+test("authorization matrix does not count unrelated exceptions as denials", () => {
+  assert.equal(isAuthorizationDenial({ error: "Unauthorized", value: null }), true);
+  assert.equal(isAuthorizationDenial({ error: "Forbidden", value: null }), true);
+  assert.equal(isAuthorizationDenial({ error: null, value: { status: 403 } }), true);
+  assert.equal(isAuthorizationDenial({ error: null, value: { reason: "not_allowed" } }), true);
+  const unrelated = { error: "Cannot read properties of undefined (reading 'split')", value: null };
+  assert.equal(isAuthorizationDenial(unrelated), false);
+  assert.equal(authRejected("getZoomPoolStatusAction", unrelated, null), false);
+});
+
 function authRejected(name, outcome, user) {
+  if (isAuthorizationDenial(outcome)) return true;
+  if (name === "getZoomPoolStatusAction" && outcome.error) return false;
   const text = `${outcome.error ?? ""} ${JSON.stringify(outcome.value) ?? ""}`.toLowerCase();
   if (!user || !user.isActive) return name !== "getZoomPoolStatusAction";
-  if (/unauthori[sz]ed|forbidden|not_allowed|not_authorized|not_org_owner|not_assigned/.test(text)) return true;
   if (name === "createProjectAction" && user.role === "admin") return true;
   if (name === "inviteAssociateAction" && user.role === "admin") return true;
   return false;
+}
+
+function matrixOutcome(name, outcome, user) {
+  if (authRejected(name, outcome, user)) return "rejected";
+  if (name === "getZoomPoolStatusAction" && outcome.error) return "error";
+  return "allowed";
 }
 
 async function call(name, user, f, suffix) {
@@ -151,7 +177,7 @@ test("non-public server actions run through the five-case authorization matrix",
       for (const [scenario, user] of scenarios) {
         const actionUser = scenario === "correct role and owner" && ["markBookingCompletedAction", "getManageLinkAction"].includes(name) ? target : user;
         const outcome = await call(name, actionUser, fixture, `${suffix}-${scenario.replace(/\W+/g, "-")}`);
-        results.push({ scenario, authOutcome: authRejected(name, outcome, user) ? "rejected" : "allowed", error: outcome.error, reason: outcome.value?.reason ?? null, redirect: outcome.redirect });
+        results.push({ scenario, authOutcome: matrixOutcome(name, outcome, user), error: outcome.error, reason: outcome.value?.reason ?? null, redirect: outcome.redirect });
       }
       rows.push({ function: name, projectScoped: projectScoped.has(name), selfScopedReason: selfScoped.get(name) ?? null, results });
     }
