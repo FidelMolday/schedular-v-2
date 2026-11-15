@@ -11,10 +11,11 @@ const runtime = globalThis.__AUTH_MATRIX__;
 const actions = require("../lib/actions.ts");
 const projectScoped = new Set([
   "saveAvailabilityAction", "updateProjectAction", "saveTemplateAction", "cancelBookingAction",
-  "markBookingCompletedAction", "claimWaitlistOfferAction", "previewDateShiftAction", "commitDateShiftAction",
+  "markBookingCompletedAction", "previewDateShiftAction", "commitDateShiftAction",
   "sendTestAction", "addParticipantAction", "sendInvitesNowAction", "removeParticipantAction",
   "manuallyResolveFlaggedBookingAction", "setProjectCertificationRequirementsAction", "getManageLinkAction",
 ]);
+const tokenGuarded = new Set(["claimWaitlistOfferAction"]);
 const selfScoped = new Map([
   ["saveAvailabilityAction", "explicitly permits an admin to edit only their own availability"],
   ["markBookingCompletedAction", "requires the caller to be the booking's assigned admin"],
@@ -124,7 +125,7 @@ async function call(name, user, f, suffix) {
   }
 }
 
-test("non-public server actions run through the five-case authorization matrix", async () => {
+test("staff server actions run through the five-case authorization matrix", async () => {
   const suffix = randomUUID();
   const ids = [];
   async function addAdmin(label, role = "admin", isActive = true) {
@@ -170,9 +171,7 @@ test("non-public server actions run through the five-case authorization matrix",
     const rows = [];
     for (const name of Object.keys(actions)) {
       if (name === "confirmBookingAction" || name === "joinWaitlistAction" || name === "getFilteredAvailabilityAction") continue;
-      if (name === "getZoomPoolStatusAction") {
-        // It has no auth() call in its body; keep it in the matrix to expose the missing check.
-      }
+      if (tokenGuarded.has(name)) continue;
       const results = [];
       for (const [scenario, user] of scenarios) {
         const actionUser = scenario === "correct role and owner" && ["markBookingCompletedAction", "getManageLinkAction"].includes(name) ? target : user;
@@ -200,7 +199,8 @@ test("non-public server actions run through the five-case authorization matrix",
     };
     console.log("RAW action matrix counts:", JSON.stringify({ entrypoints: rows.length, cases: rows.length * 5, findings }));
     console.log("RAW action matrix outcomes:", JSON.stringify({ noSession: rows.filter((row) => row.results[0].authOutcome === "rejected").length, adminRole: rows.filter((row) => row.results[1].authOutcome === "rejected").length, superAdmin: rows.filter((row) => row.results[2].authOutcome === "rejected").length, deactivated: rows.filter((row) => row.results[3].authOutcome === "rejected").length, allowedOwner: rows.filter((row) => row.results[4].authOutcome === "allowed").length }));
-    assert.equal(rows.length, 38, "every non-public lib/actions.ts export must be invoked");
+    assert.equal(rows.length, 37, "every staff-scoped lib/actions.ts export must be invoked");
+    assert.deepEqual([...tokenGuarded], ["claimWaitlistOfferAction"], "token-guarded actions are covered by signed-token tests");
     assert.deepEqual(noSessionFailures, []);
     assert.deepEqual(inactiveFailures, []);
     assert.deepEqual(allowedPathFailures, []);

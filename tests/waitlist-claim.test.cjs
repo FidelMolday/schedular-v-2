@@ -3,7 +3,8 @@ const { randomUUID } = require("node:crypto");
 const { test } = require("node:test");
 const { db } = require("../lib/db.ts");
 const { setAdminRangesForDate } = require("../lib/data/availability-ranges.ts");
-const { claimWaitlistOffer, offerNextWaitlistEntry } = require("../lib/data/waitlist.ts");
+const { offerNextWaitlistEntry } = require("../lib/data/waitlist.ts");
+const { claimWaitlistOfferAction } = require("../lib/actions.ts");
 const { signWaitlistClaimToken, verifyWaitlistClaimToken } = require("../lib/waitlist-claim-token.ts");
 
 process.env.AUTH_SECRET = "waitlist-claim-scratch-test-secret";
@@ -70,14 +71,14 @@ test("a valid waitlist offer token claims a slot once; stale and replayed claims
     const claims = verifyWaitlistClaimToken(token);
     assert.equal(claims.entryId, entry.id);
 
-    const wrongEntry = await claimWaitlistOffer(entry.id, expiresAt.getTime() + 1);
+    const wrongEntry = await claimWaitlistOfferAction("different-entry", token);
     assert.deepEqual(wrongEntry, { ok: false, reason: "offer_expired" });
 
-    const first = await claimWaitlistOffer(entry.id, claims.expiresAtMs);
+    const first = await claimWaitlistOfferAction(entry.id, token);
     console.log("RAW first waitlist claim:", JSON.stringify(first));
     assert.equal(first.ok, true);
 
-    const second = await claimWaitlistOffer(entry.id, claims.expiresAtMs);
+    const second = await claimWaitlistOfferAction(entry.id, token);
     console.log("RAW replayed waitlist claim:", JSON.stringify(second));
     assert.deepEqual(second, { ok: false, reason: "offer_expired" });
 
