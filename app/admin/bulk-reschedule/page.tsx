@@ -68,6 +68,7 @@ export default function BulkReschedulePage() {
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   const ensureLoaded = useCallback(async () => {
     if (loaded) return;
@@ -84,6 +85,7 @@ export default function BulkReschedulePage() {
 
   const runPreview = useCallback(async () => {
     setCommitResult(null);
+    setRequestError(null);
     setLoading(true);
     try {
       if (mode === "admin-unavailable" && aAdminId && aFrom && aTo) {
@@ -92,7 +94,17 @@ export default function BulkReschedulePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ adminId: aAdminId, fromDate: aFrom, toDate: aTo }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setPreview(null);
+          setRequestError(typeof data?.error === "string" ? data.error : "Unable to preview changes.");
+          return;
+        }
+        if (!Array.isArray(data)) {
+          setPreview(null);
+          setRequestError("Unable to preview changes.");
+          return;
+        }
         setPreview(data);
       } else if (mode === "date-shift" && bProjectId && bFrom && bTo && bOffset) {
         const res = await fetch("/api/reschedule/preview-date-shift", {
@@ -100,15 +112,30 @@ export default function BulkReschedulePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId: bProjectId, fromDate: bFrom, toDate: bTo, offsetDays: parseInt(bOffset) }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setPreview(null);
+          setRequestError(typeof data?.error === "string" ? data.error : "Unable to preview changes.");
+          return;
+        }
+        if (!Array.isArray(data)) {
+          setPreview(null);
+          setRequestError("Unable to preview changes.");
+          return;
+        }
         setPreview(data);
       }
+    } catch {
+      setPreview(null);
+      setRequestError("Unable to preview changes.");
     } finally {
       setLoading(false);
     }
   }, [mode, aAdminId, aFrom, aTo, bProjectId, bFrom, bTo, bOffset]);
 
   const runCommit = useCallback(async () => {
+    setRequestError(null);
+    setCommitResult(null);
     setCommitting(true);
     try {
       if (mode === "admin-unavailable" && aAdminId && aFrom && aTo) {
@@ -117,7 +144,15 @@ export default function BulkReschedulePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ adminId: aAdminId, fromDate: aFrom, toDate: aTo }),
         });
-        const data: CommitResult = await res.json();
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setRequestError(typeof data?.error === "string" ? data.error : "Unable to apply changes.");
+          return;
+        }
+        if (!data || typeof data.succeeded !== "number" || !Array.isArray(data.failed)) {
+          setRequestError("Unable to apply changes.");
+          return;
+        }
         setCommitResult(data);
       } else if (mode === "date-shift" && bProjectId && bFrom && bTo && bOffset) {
         const res = await fetch("/api/reschedule/commit-date-shift", {
@@ -125,9 +160,19 @@ export default function BulkReschedulePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId: bProjectId, fromDate: bFrom, toDate: bTo, offsetDays: parseInt(bOffset) }),
         });
-        const data: CommitResult = await res.json();
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setRequestError(typeof data?.error === "string" ? data.error : "Unable to apply changes.");
+          return;
+        }
+        if (!data || typeof data.succeeded !== "number" || !Array.isArray(data.failed)) {
+          setRequestError("Unable to apply changes.");
+          return;
+        }
         setCommitResult(data);
       }
+    } catch {
+      setRequestError("Unable to apply changes.");
     } finally {
       setCommitting(false);
     }
@@ -168,6 +213,12 @@ export default function BulkReschedulePage() {
             Shift Date Range
           </button>
         </div>
+
+        {requestError && (
+          <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-6 text-sm dark:bg-red-900/20 dark:border-red-900 dark:text-red-300">
+            {requestError}
+          </div>
+        )}
 
         {/* Mode A form */}
         {mode === "admin-unavailable" && (

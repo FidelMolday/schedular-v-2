@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
 import { isAdminEligibleForSlot, pickAvailableAdmin, reassignBookingAdmin, rescheduleBookingTime } from "@/lib/data/bookings";
+import { isAdminUnavailableProjectManageable } from "@/lib/admin-unavailable-access";
+import type { AuthorizationActor } from "@/lib/authz";
 
 function addDays(dateKey: string, offset: number): string {
   const d = new Date(dateKey + "T00:00:00Z");
@@ -72,7 +74,8 @@ export async function previewAdminUnavailable(
 export async function commitAdminUnavailable(
   adminId: string,
   fromDate: string,
-  toDate: string
+  toDate: string,
+  actor: AuthorizationActor,
 ): Promise<{ succeeded: number; failed: { bookingId: string; reason: string }[] }> {
   const bookings = await db.booking.findMany({
     where: {
@@ -88,6 +91,11 @@ export async function commitAdminUnavailable(
   const failed: { bookingId: string; reason: string }[] = [];
 
   for (const b of bookings) {
+    if (!(await isAdminUnavailableProjectManageable(actor, b.projectId))) {
+      failed.push({ bookingId: b.id, reason: "project_not_managed" });
+      continue;
+    }
+
     const projectAdmins = await db.projectAdmin.findMany({
       where: { projectId: b.projectId, adminId: { not: adminId } },
       select: { admin: { select: { id: true, name: true } } },
@@ -97,6 +105,11 @@ export async function commitAdminUnavailable(
     for (const pa of projectAdmins) {
       const eligible = await isAdminEligibleForSlot(b.projectId, pa.admin.id, b.dateKey, b.time);
       if (eligible) {
+        if (!(await isAdminUnavailableProjectManageable(actor, b.projectId))) {
+          failed.push({ bookingId: b.id, reason: "project_not_managed" });
+          assigned = true;
+          break;
+        }
         const result = await reassignBookingAdmin(b.id, pa.admin.id);
         if (result.ok) {
           succeeded++;
