@@ -4,12 +4,7 @@ const { test } = require("node:test");
 process.env.AZURE_AD_TENANT_ID ??= "9f6e83db-7a61-4c31-a5d8-1df830f649bf";
 
 let actorId;
-const authPath = require.resolve("../auth.ts");
-require(authPath);
-require.cache[authPath].exports = { auth: async () => ({ user: { id: actorId, name: "Project Test", email: "project-test@example.test" } }) };
-require("next/headers").headers = async () => new Headers({ "x-forwarded-for": "127.0.0.44" });
-require("next/cache").revalidatePath = () => {};
-require("next/navigation").redirect = () => {};
+const runtime = globalThis.__AUTH_MATRIX__;
 
 const { db } = require("../lib/db.ts");
 const { createProjectAction, inviteAssociateAction } = require("../lib/actions.ts");
@@ -42,6 +37,7 @@ test("project creation ignores a super_admin's supplied ownerId; invites are pro
   const superAdmin = await db.admin.create({ data: { name: "Project Super", initials: "PS", email: `super-${suffix}@example.test`, role: "super_admin" } });
   const otherOwner = await db.admin.create({ data: { name: "Other Owner", initials: "OO", email: `owner-${suffix}@example.test`, role: "super_admin" } });
   actorId = superAdmin.id;
+  runtime.session = { user: { id: actorId, name: superAdmin.name, email: superAdmin.email, role: superAdmin.role }, expires: new Date(Date.now() + 60_000).toISOString() };
   let created;
   let owned;
   let foreign;
@@ -51,7 +47,7 @@ test("project creation ignores a super_admin's supplied ownerId; invites are pro
     try {
       await createProjectAction(projectInput(name, otherOwner.id));
     } catch (error) {
-      if (!String(error?.digest ?? "").startsWith("NEXT_REDIRECT;replace;/admin/projects;")) throw error;
+      if (error.message !== "NEXT_REDIRECT:/admin/projects") throw error;
     }
     created = await db.project.findFirst({ where: { name }, select: { id: true, ownerId: true } });
     console.log("RAW super_admin project owner:", JSON.stringify({ requestedOwnerId: otherOwner.id, actualOwnerId: created?.ownerId }));
@@ -68,6 +64,7 @@ test("project creation ignores a super_admin's supplied ownerId; invites are pro
     assert.ok(await db.projectAdmin.findUnique({ where: { projectId_adminId: { projectId: owned.id, adminId: invited.id } } }));
     console.log("RAW invite scope:", JSON.stringify({ foreignProject: "rejected", ownedProject: "allowed" }));
   } finally {
+    runtime.session = null;
     const projectIds = [created?.id, owned?.id, foreign?.id].filter(Boolean);
     await db.auditLog.deleteMany({ where: { projectId: { in: projectIds } } });
     await db.projectAdmin.deleteMany({ where: { projectId: { in: projectIds } } });

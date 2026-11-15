@@ -132,6 +132,15 @@ export async function listProjects(ownerId?: string): Promise<ProjectWithAdmins[
   return rows.map(toProjectWithAdmins);
 }
 
+export async function listProjectsForAdmin(adminId: string): Promise<ProjectWithAdmins[]> {
+  const rows = await db.project.findMany({
+    where: { NOT: { slug: DEMO_SLUG }, admins: { some: { adminId } } },
+    include: { admins: { include: { admin: true } }, owner: { select: { name: true } }, defaultSessionType: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(toProjectWithAdmins);
+}
+
 export async function getProjectBySlug(slug: string): Promise<ProjectWithAdmins | null> {
   const row = await db.project.findUnique({
     where: { slug },

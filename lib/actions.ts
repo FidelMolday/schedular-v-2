@@ -62,8 +62,15 @@ export async function saveAvailabilityAction(
   entries: { dateKey: string; time: string; selected: boolean }[]
 ) {
   const actor = await requireActiveSession();
-  // Only allow setting your own availability, or if you're a super_admin/org_owner
-  if (actor.id !== adminId && actor.role !== "org_owner" && actor.role !== "super_admin") {
+  const isSelf = actor.id === adminId;
+  const isOrgOwner = actor.role === "org_owner";
+  const superAdminProject = actor.role === "super_admin"
+    ? await db.project.findFirst({
+        where: { id: projectId, ownerId: actor.id, admins: { some: { adminId } } },
+        select: { id: true },
+      })
+    : null;
+  if (!isSelf && !isOrgOwner && !superAdminProject) {
     throw new Error("Unauthorized");
   }
   await setAdminAvailabilityBulk(projectId, adminId, entries);
