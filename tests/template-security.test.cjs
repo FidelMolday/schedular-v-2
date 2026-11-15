@@ -78,14 +78,23 @@ test("a normal template saves as a sanitized version and sends as a test log", a
     category: "reminder", audience: "participant", projectId: null,
     subject: "Hello {{participant_name}}",
     bodyHtml: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;"><p>Hi {{participant_name}}!</p></div>',
+    actor: { id: "audit-template-actor", name: "Template Actor" },
   });
   let log;
   try {
     assert.equal(created.bodyHtml, '<div style="font-family:sans-serif;max-width:600px;margin:0 auto"><p>Hi {{participant_name}}!</p></div>');
-    log = await sendTestEmail(created.id, "template-test@example.test");
+    log = await sendTestEmail(created.id, "template-test@example.test", { id: "audit-template-actor", name: "Template Actor" });
     assert.equal(log.status, "test");
     assert.equal(log.subject, "Hello Jane Doe");
     assert.equal(log.renderedBody, '<div style="font-family:sans-serif;max-width:600px;margin:0 auto"><p>Hi Jane Doe!</p></div>');
+    const templateAudit = await db.auditLog.findFirst({ where: { entityType: "EmailTemplate", entityId: created.id } });
+    const sendAudit = await db.auditLog.findFirst({ where: { entityType: "NotificationLog", entityId: log.id } });
+    for (const audit of [templateAudit, sendAudit]) {
+      assert.equal(audit.actorId, "audit-template-actor");
+      assert.equal(audit.actorLabel, "Template Actor");
+      assert.notEqual(audit.actorLabel, "Unknown (auth not yet wired)");
+      assert.notEqual(audit.actorLabel, "System");
+    }
     console.log("RAW template save/send positive:", JSON.stringify({ savedBody: created.bodyHtml, loggedSubject: log.subject, loggedBody: log.renderedBody }));
   } finally {
     if (log) await db.notificationLog.delete({ where: { id: log.id } });

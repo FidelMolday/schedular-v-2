@@ -53,8 +53,8 @@ export function PasswordSetupForm({ token, type }: { token: string; type: SetupT
       setError("Passwords do not match.");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    if (password.length < 12) {
+      setError("Password must be at least 12 characters.");
       return;
     }
 
@@ -103,10 +103,10 @@ export function PasswordSetupForm({ token, type }: { token: string; type: SetupT
               id="password"
               type="password"
               required
-              minLength={8}
+              minLength={12}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
+              placeholder="At least 12 characters"
               className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
@@ -118,7 +118,7 @@ export function PasswordSetupForm({ token, type }: { token: string; type: SetupT
               id="confirm"
               type="password"
               required
-              minLength={8}
+              minLength={12}
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               placeholder="Re-enter your password"
