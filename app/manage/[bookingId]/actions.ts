@@ -6,7 +6,7 @@ import { cancelBooking, rescheduleBookingTime } from "@/lib/data/bookings";
 import { hoursUntilSession } from "@/lib/slotHelpers";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkRateLimit, checkRateLimitForIpAndAccount, getClientIp } from "@/lib/rate-limit";
 import { signManageToken } from "@/lib/manage-token";
 import { createVerificationPin, verifyPin } from "@/lib/pin";
 import { getActiveTemplate } from "@/lib/data/templates";
@@ -69,7 +69,7 @@ export async function requestManagePin(
 ): Promise<{ sent: true } | { sent: false; error: string }> {
   const hdrs = await headers();
   const ip = getClientIp(hdrs);
-  if (!checkRateLimit(`manage-pin-request:${ip}`, 10, 15 * 60 * 1000)) {
+  if (!checkRateLimitForIpAndAccount("manage-pin-request", ip, email, 10, 15 * 60 * 1000)) {
     return { sent: false, error: "Too many attempts. Please try again later." };
   }
 
@@ -140,7 +140,7 @@ export async function verifyManagePin(
 ): Promise<{ verified: true; token: string } | { verified: false; error: string }> {
   const hdrs = await headers();
   const ip = getClientIp(hdrs);
-  if (!checkRateLimit(`manage-pin-verify:${ip}`, 10, 15 * 60 * 1000)) {
+  if (!checkRateLimitForIpAndAccount("manage-pin-verify", ip, email, 10, 15 * 60 * 1000)) {
     return { verified: false, error: "Too many attempts. Please try again later." };
   }
 

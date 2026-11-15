@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import AzureAD from "next-auth/providers/azure-ad";
 import Credentials from "next-auth/providers/credentials";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkRateLimitForIpAndAccount, getClientIp } from "@/lib/rate-limit";
 import { headers } from "next/headers";
 import { azureTenantIssuer, requireAzureTenantId } from "@/lib/azure-tenant";
 
@@ -121,13 +121,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        // Rate-limit sign-in attempts: 10 per email+IP per 15 minutes.
-        // Generous enough to avoid locking out real users who mistype,
-        // strict enough to slow brute-force attacks.
+        // Apply independent source-IP and normalized-account limits so
+        // rotating networks cannot evade the per-account sign-in ceiling.
         const hdrs = await headers();
         const ip = getClientIp(hdrs);
         const email = (credentials.email as string).toLowerCase().trim();
-        if (!checkRateLimit(`signin:${email}:${ip}`, 10, 15 * 60 * 1000)) {
+        if (!checkRateLimitForIpAndAccount("signin", ip, email, 10, 15 * 60 * 1000)) {
           return null;
         }
 

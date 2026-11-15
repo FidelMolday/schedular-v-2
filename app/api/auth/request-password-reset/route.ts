@@ -4,7 +4,7 @@ import { stripHtml } from "@/lib/html-to-text";
 import { db } from "@/lib/db";
 import { createPasswordToken } from "@/lib/data/password-reset";
 import { logNotification } from "@/lib/data/notifications";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkRateLimit, checkRateLimitForAccount, getClientIp } from "@/lib/rate-limit";
 import { escapeHtml } from "@/lib/template-utils";
 
 export async function POST(request: Request) {
@@ -19,8 +19,12 @@ export async function POST(request: Request) {
     if (!email || typeof email !== "string") {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!checkRateLimitForAccount("password-reset", normalizedEmail, 5, 15 * 60 * 1000)) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+    }
 
-    const admin = await db.admin.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const admin = await db.admin.findUnique({ where: { email: normalizedEmail } });
 
     // Unknown and inactive addresses share the same generic success response;
     // only active accounts receive a reset/setup email.
