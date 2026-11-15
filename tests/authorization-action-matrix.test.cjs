@@ -17,7 +17,6 @@ const projectScoped = new Set([
 ]);
 const tokenGuarded = new Set(["claimWaitlistOfferAction"]);
 const selfScoped = new Map([
-  ["saveAvailabilityAction", "explicitly permits an admin to edit only their own availability"],
   ["markBookingCompletedAction", "requires the caller to be the booking's assigned admin"],
   ["getManageLinkAction", "requires the caller to be an active admin assigned to the booking's project"],
 ]);
@@ -35,7 +34,7 @@ const projectForm = (slug) => ({
 function argsFor(name, f, user, suffix) {
   const missing = `matrix-missing-${suffix}`;
   switch (name) {
-    case "saveAvailabilityAction": return [f.project.id, user?.id ?? f.outsider.id, []];
+    case "saveAvailabilityAction": return [f.project.id, f.target.id, []];
     case "createProjectAction": return [projectForm(suffix)];
     case "updateProjectAction": return [f.project.slug, projectForm("updated")];
     case "saveTemplateAction": return [{ category: "reminder", audience: "admin", projectId: f.project.id, subject: "Matrix", bodyHtml: "" }];
