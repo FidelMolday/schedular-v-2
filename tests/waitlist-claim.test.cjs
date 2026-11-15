@@ -29,7 +29,17 @@ test("a valid waitlist offer token claims a slot once; stale and replayed claims
   });
   let entry;
   let linkEntry;
+  let offerTemplate;
   try {
+    offerTemplate = await db.emailTemplate.create({
+      data: {
+        category: "waitlist_offer",
+        audience: "participant",
+        projectId: project.id,
+        subject: "A slot is available",
+        bodyHtml: '<p>Hello {{participant_name}}, <a href="{{booking_link}}">claim your slot</a>.</p>',
+      },
+    });
     await db.projectAdmin.create({ data: { projectId: project.id, adminId: admin.id } });
     await setAdminRangesForDate(admin.id, dateKey, [{ startTime: "09:00", endTime: "17:00" }]);
     const linkDate = new Date(date.getTime() + 1 * 86400000);
@@ -79,6 +89,7 @@ test("a valid waitlist offer token claims a slot once; stale and replayed claims
     if (linkEntry) await db.waitlistEntry.deleteMany({ where: { id: linkEntry.id } });
     await db.auditLog.deleteMany({ where: { projectId: project.id } });
     await db.booking.deleteMany({ where: { projectId: project.id } });
+    if (offerTemplate) await db.emailTemplate.deleteMany({ where: { id: offerTemplate.id } });
     await db.projectAdmin.deleteMany({ where: { projectId: project.id } });
     await db.project.deleteMany({ where: { id: project.id } });
     await db.admin.deleteMany({ where: { id: admin.id } });
