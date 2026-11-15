@@ -48,6 +48,7 @@ import { listZoomPoolUsers, zoomPoolConfigured, getZoomPoolCredentials } from "@
 import { upsertReminderSchedules, getReminderSchedules } from "@/lib/data/reminder-schedules";
 import type { ReminderScheduleInput } from "@/lib/data/reminder-schedules";
 import { verifyWaitlistClaimToken } from "@/lib/waitlist-claim-token";
+import { checkAdminUnavailableAccess } from "@/lib/admin-unavailable-access";
 
 async function activeActorForRoles(roles: readonly AuthorizationActor["role"][]): Promise<AuthorizationActor | null> {
   const active = await requireActiveSession(() => null);
@@ -387,26 +388,14 @@ export async function claimWaitlistOfferAction(entryId: string, token: string) {
 
 export async function previewAdminUnavailableAction(adminId: string, fromDate: string, toDate: string) {
   const actor = await requireActiveSession();
-  if (actor.role !== "org_owner" && actor.role !== "super_admin") {
-    const inScope = await db.projectAdmin.findFirst({
-      where: { adminId, project: { ownerId: actor.id } },
-      select: { id: true },
-    });
-    if (!inScope) throw new Error("Forbidden");
-  }
+  if (!(await checkAdminUnavailableAccess(actor, adminId, fromDate, toDate))) throw new Error("Forbidden");
   return previewAdminUnavailable(adminId, fromDate, toDate);
 }
 
 export async function commitAdminUnavailableAction(adminId: string, fromDate: string, toDate: string) {
   const actor = await requireActiveSession();
-  if (actor.role !== "org_owner" && actor.role !== "super_admin") {
-    const inScope = await db.projectAdmin.findFirst({
-      where: { adminId, project: { ownerId: actor.id } },
-      select: { id: true },
-    });
-    if (!inScope) throw new Error("Forbidden");
-  }
-  const result = await commitAdminUnavailable(adminId, fromDate, toDate);
+  if (!(await checkAdminUnavailableAccess(actor, adminId, fromDate, toDate))) throw new Error("Forbidden");
+  const result = await commitAdminUnavailable(adminId, fromDate, toDate, actor);
   revalidatePath("/admin/calendar");
   revalidatePath("/admin/bulk-reschedule");
   return result;
