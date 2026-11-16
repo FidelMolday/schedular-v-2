@@ -5,6 +5,7 @@ const {
   checkRateLimit,
   checkRateLimitForIpAndAccount,
   getClientIp,
+  maskIpForDebug,
 } = require("../lib/rate-limit.ts");
 
 test("trusted right-side proxy entry ignores a spoofed leftmost X-Forwarded-For value", () => {
@@ -25,7 +26,7 @@ test("separate client IPs have separate buckets while a normalized account limit
   assert.equal(checkRateLimitForIpAndAccount("signin", "198.51.100.3", "alice@example.test", 1, 60000), false);
 });
 
-test("trusted hop count, fallback, and debug output use the configured selection without logging full IPs", () => {
+test("trusted hop count, fallback, and debug output use configured selection without logging full IPs", () => {
   process.env.TRUSTED_PROXY_HOPS = "2";
   assert.equal(getClientIp(new Headers({ "x-forwarded-for": "192.0.2.5, 198.51.100.8, 203.0.113.21" })), "198.51.100.8");
   assert.equal(getClientIp(new Headers({ "x-forwarded-for": "192.0.2.5", "x-real-ip": "203.0.113.9" })), "203.0.113.9");
@@ -58,6 +59,41 @@ test("debug masks every IPv4 and IPv6 forwarded entry", () => {
     delete process.env.RATE_LIMIT_DEBUG;
     delete process.env.TRUSTED_PROXY_HOPS;
   }
-  assert.match(logged[0], /\["192\.0\.2\.0","2001:db8:abcd:1234:…"\]/);
+  assert.ok(logged[0].includes(`"192.0.2.0","2001:db8:abcd:1234:${String.fromCharCode(0x2026)}"`));
   assert.doesNotMatch(logged[0], /192\.0\.2\.123|2001:db8:abcd:1234::9/);
+});
+
+test("pure JavaScript IP masker handles address forms and rejects malformed input", () => {
+  const ellipsis = String.fromCharCode(0x2026);
+  const valid = [
+    ["203.0.113.84", "203.0.113.0"],
+    ["203.0.113.84:443", "203.0.113.0"],
+    ["[2001:db8:abcd:1234::9]:443", `2001:db8:abcd:1234:${ellipsis}`],
+    ["::ffff:192.0.2.128", `::ffff:${ellipsis}`],
+    ["2001:db8::1", `2001:db8:${ellipsis}`],
+    ["2001:DB8:ABCD:1234::BEEF", `2001:DB8:ABCD:1234:${ellipsis}`],
+    ["  192.0.2.99  ", "192.0.2.0"],
+  ];
+  for (const [input, expected] of valid) assert.equal(maskIpForDebug(input), expected, input);
+  for (const input of ["", "unknown", "garbage", "999.1.2.3", "2001:::1", "x".repeat(129)]) {
+    assert.equal(maskIpForDebug(input), "unparseable", JSON.stringify(input));
+  }
+});
+
+test("debug output marks invalid forwarded values unparseable and keeps hop selection", () => {
+  process.env.TRUSTED_PROXY_HOPS = "2";
+  process.env.RATE_LIMIT_DEBUG = "1";
+  const logged = [];
+  const originalInfo = console.info;
+  console.info = (line) => logged.push(line);
+  try {
+    assert.equal(getClientIp(new Headers({ "x-forwarded-for": "garbage, 192.0.2.88, 203.0.113.2" })), "192.0.2.88");
+    assert.equal(getClientIp(new Headers({ "x-forwarded-for": "", "x-real-ip": "unknown" })), "unknown");
+  } finally {
+    console.info = originalInfo;
+    delete process.env.RATE_LIMIT_DEBUG;
+    delete process.env.TRUSTED_PROXY_HOPS;
+  }
+  assert.match(logged[0], /xff_entries=\["unparseable","192\.0\.2\.0","203\.0\.113\.0"\] trusted_proxy_hops=2 selected_index=1 selected_ip=192\.0\.2\.0/);
+  assert.match(logged[1], /xff_entries=\[\] trusted_proxy_hops=2 selected_index=-1 selected_ip=unparseable/);
 });
