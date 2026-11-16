@@ -97,6 +97,26 @@ test("authenticated route handlers are invoked across the authorization matrix",
       },
     });
     projectId = project.id;
+    await db.projectAdmin.create({ data: { projectId: project.id, adminId: unrelated.id } });
+    const foreignMarker = `foreign-${suffix}`;
+    const ownerMarker = `owner-${suffix}`;
+    await db.participant.create({ data: { projectId: project.id, name: `${foreignMarker} Participant`, email: `${foreignMarker}@example.test` } });
+    await db.booking.create({ data: {
+      projectId: project.id,
+      adminId: unrelated.id,
+      participantName: `${foreignMarker} Participant`,
+      participantEmail: `${foreignMarker}@example.test`,
+      dateKey: "2030-01-15",
+      time: "10:00",
+      status: "confirmed",
+    } });
+    await db.adminAvailabilityRange.create({
+      data: { adminId: owner.id, dateKey: "2030-01-15", startTime: "11:00", endTime: "12:00" },
+    });
+    await db.adminAvailabilityRange.create({
+      data: { adminId: unrelated.id, dateKey: "2030-01-15", startTime: "13:00", endTime: "14:00" },
+    });
+    await db.project.update({ where: { id: project.id }, data: { name: `${ownerMarker} Project` } });
     const fixture = { owner, unrelated, outsider, superAdmin, project };
     const cases = [];
     for (const [name, fn] of Object.entries(routes)) {
@@ -119,6 +139,60 @@ test("authenticated route handlers are invoked across the authorization matrix",
       assert.equal(row.matrix[0][1].outcome, "rejected", `${row.entrypoint} must reject no session`);
       assert.equal(row.matrix[3][1].outcome, "rejected", `${row.entrypoint} must reject deactivated identity`);
     }
+
+    // STEP 4 scoped-empty checks: the project, booking, and participant belong to
+    // the org owner's scope. Email is intentional for these two role-restricted
+    // active-staff directory endpoints; only their documented fields are allowed.
+    const scoped = [
+      ["GET /api/calendar", outsider],
+      ["GET /api/analytics", outsider],
+      ["GET /api/reports/[type]", outsider],
+      ["GET /api/availability-ranges", outsider],
+      ["GET /api/team-availability", superAdmin],
+    ];
+    const scopedRows = [];
+    for (const [name, outsiderUser] of scoped) {
+      const route = routes[name];
+      const deniedScope = await invoke(name, route, fixture, outsiderUser);
+      const ownerControl = await invoke(name, route, fixture, owner);
+      const foreignJson = JSON.stringify(deniedScope.body ?? deniedScope.result ?? null);
+      const ownerJson = JSON.stringify(ownerControl.body ?? ownerControl.result ?? null);
+      assert.ok(!foreignJson.includes(foreignMarker), `${name} exposed foreign booking or participant data`);
+      assert.ok(!foreignJson.includes(ownerMarker), `${name} exposed a foreign project`);
+      assert.ok(ownerJson.includes(ownerMarker) || ownerJson.includes("11:00"), `${name} owner positive control did not include fixture data`);
+      scopedRows.push({ category: "scoped-empty", entrypoint: name, outsiderStatus: deniedScope.status, ownerStatus: ownerControl.status, outsiderBody: deniedScope.body, ownerBody: ownerControl.body });
+    }
+    console.log("RAW STEP 4 scoped-empty results:", JSON.stringify(scopedRows));
+
+    function assertNoSensitiveKeys(value, path = "response") {
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => assertNoSensitiveKeys(item, `${path}[${index}]`));
+        return;
+      }
+      if (!value || typeof value !== "object") return;
+      for (const [key, child] of Object.entries(value)) {
+        assert.ok(!["token", "secret", "passwordhash", "access"].includes(key.toLowerCase()), `${path} contains prohibited key ${key}`);
+        assertNoSensitiveKeys(child, `${path}.${key}`);
+      }
+    }
+    const adminDirectory = await invoke("GET /api/admins", routes["GET /api/admins"], fixture, owner);
+    const superAdminDirectory = await invoke("GET /api/super-admins", routes["GET /api/super-admins"], fixture, owner);
+    const graphStatus = await invoke("GET /api/graph-status", routes["GET /api/graph-status"], fixture, owner);
+    const expectedStaffKeys = ["accountType", "email", "id", "initials", "name", "role"];
+    for (const [name, response] of [["/api/admins", adminDirectory], ["/api/super-admins", superAdminDirectory]]) {
+      assert.equal(response.status, 200, `${name} expected 200`);
+      assert.ok(Array.isArray(response.body), `${name} expected array`);
+      for (const row of response.body) assert.deepEqual(Object.keys(row).sort(), expectedStaffKeys, `${name} returned undocumented keys`);
+      assertNoSensitiveKeys(response.body);
+    }
+    assert.equal(graphStatus.status, 200);
+    assert.deepEqual(Object.keys(graphStatus.body).sort(), ["status"]);
+    assertNoSensitiveKeys(graphStatus.body);
+    console.log("RAW STEP 4 directory response keys:", JSON.stringify({
+      admins: [...new Set(adminDirectory.body.flatMap((row) => Object.keys(row)))].sort(),
+      superAdmins: [...new Set(superAdminDirectory.body.flatMap((row) => Object.keys(row)))].sort(),
+      graphStatus: Object.keys(graphStatus.body).sort(),
+    }));
   } finally {
     runtime.session = null;
     if (projectId) await db.project.deleteMany({ where: { id: projectId } });
