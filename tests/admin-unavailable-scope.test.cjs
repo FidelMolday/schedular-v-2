@@ -147,6 +147,10 @@ test("admin-unavailable routes scope every affected project before preview or co
     assert.equal(ownedCommit.status, 200);
     assert.equal(ownedCommit.body.succeeded, 1);
     assert.equal((await db.booking.findUnique({ where: { id: ownedBooking.id } })).adminId, ownedReplacement.id);
+    const bulkReassignmentAudit = await db.auditLog.findFirst({ where: { entityType: "Booking", entityId: ownedBooking.id, action: "booking_rescheduled" } });
+    assert.equal(bulkReassignmentAudit.actorId, owningSuper.id);
+    assert.equal(bulkReassignmentAudit.actorLabel, owningSuper.name);
+    assert.notEqual(bulkReassignmentAudit.actorLabel, "System");
     assert.equal(foreignPreview.status, 403);
     assert.equal(foreignCommit.status, 403);
     assert.deepEqual(foreignAfter, foreignBefore);

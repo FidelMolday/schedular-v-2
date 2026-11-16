@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkRateLimit, checkRateLimitForAccount, getClientIp } from "@/lib/rate-limit";
 
 function hashToken(raw: string): string {
   return crypto.createHash("sha256").update(raw).digest("hex");
@@ -52,8 +52,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Token and password are required." }, { status: 400 });
     }
 
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+    if (password.length < 12) {
+      return NextResponse.json({ error: "Password must be at least 12 characters." }, { status: 400 });
     }
 
     const resetToken = await db.passwordResetToken.findUnique({
@@ -63,6 +63,10 @@ export async function POST(request: Request) {
 
     if (!resetToken) {
       return NextResponse.json({ error: "Invalid or expired setup link." }, { status: 404 });
+    }
+
+    if (!checkRateLimitForAccount("setup-password", resetToken.admin.email, 10, 15 * 60 * 1000)) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
     }
 
     // A token for an inactive or deleted admin is indistinguishable from an

@@ -55,7 +55,8 @@ export async function logNotification(input: {
  */
 export async function sendTestEmail(
   templateId: string,
-  recipientEmail: string
+  recipientEmail: string,
+  actor?: { id: string; name: string }
 ) {
   const template = await db.emailTemplate.findUniqueOrThrow({
     where: { id: templateId },
@@ -77,8 +78,9 @@ export async function sendTestEmail(
   // Audit: non-blocking, best-effort
   recordAudit({
     action: "notification_sent",
-    actorType: "super_admin",
-    actorLabel: "Unknown (auth not yet wired)", // TODO: replace with session.user once auth lands
+    actorType: "admin",
+    actorId: actor?.id,
+    actorLabel: actor?.name ?? "System",
     entityType: "NotificationLog",
     entityId: log.id,
     projectId: template.projectId ?? undefined,

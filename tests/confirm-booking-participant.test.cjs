@@ -43,7 +43,7 @@ test("public booking confirmation binds participant id to both project and submi
   try {
     await db.projectAdmin.create({ data: { projectId: project.id, adminId: admin.id } });
     await setAdminRangesForDate(admin.id, dateKey, [{ startTime: "09:00", endTime: "17:00" }]);
-    const participant = await db.participant.create({ data: { projectId: project.id, name: "Confirm Participant", email: `participant-${suffix}@example.test` } });
+    const participant = await db.participant.create({ data: { projectId: project.id, name: "O'Brien Zoë", email: `participant-${suffix}@example.test` } });
     const base = { projectId: project.id, dateKey, time: "10:00", participantName: participant.name, participantEmail: participant.email, participantId: participant.id };
 
     currentIp = "127.0.0.31";
@@ -52,6 +52,10 @@ test("public booking confirmation binds participant id to both project and submi
     currentIp = "127.0.0.32";
     const wrongEmail = await confirmBookingAction({ ...base, participantEmail: `attacker-${suffix}@example.test` });
     assert.deepEqual(wrongEmail, { ok: false, reason: "slot_full" });
+    const invalidName = await confirmBookingAction({ ...base, participantName: "<a href=https://evil.test>x</a>" });
+    assert.deepEqual(invalidName, { ok: false, reason: "slot_full" });
+    const invalidEmail = await confirmBookingAction({ ...base, participantEmail: "not-an-email" });
+    assert.deepEqual(invalidEmail, { ok: false, reason: "slot_full" });
 
     currentIp = "127.0.0.33";
     const confirmed = await confirmBookingAction(base);
@@ -59,7 +63,8 @@ test("public booking confirmation binds participant id to both project and submi
     assert.equal(confirmed.ok, true);
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal((await db.participant.findUnique({ where: { id: participant.id }, select: { status: true } })).status, "booked");
-    console.log("RAW public confirmation negatives:", JSON.stringify({ wrongProject: wrongProject.reason, wrongEmail: wrongEmail.reason }));
+    assert.equal((await db.participant.findUnique({ where: { id: participant.id }, select: { name: true } })).name, "O'Brien Zoë");
+    console.log("RAW public confirmation negatives:", JSON.stringify({ wrongProject: wrongProject.reason, wrongEmail: wrongEmail.reason, invalidName: invalidName.reason, invalidEmail: invalidEmail.reason }));
   } finally {
     await db.auditLog.deleteMany({ where: { projectId: { in: [project.id, otherProject.id] } } });
     await db.booking.deleteMany({ where: { projectId: { in: [project.id, otherProject.id] } } });

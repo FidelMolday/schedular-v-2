@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { recordAudit } from "@/lib/data/audit";
 import type { EmailCategory, EmailAudience, Prisma } from "@prisma/client";
-import type { EmailTemplateWithDefault } from "@/lib/template-utils";
+import { sanitizeTemplateHtml, type EmailTemplateWithDefault } from "@/lib/template-utils";
 
 export type { EmailTemplateWithDefault };
 export { PLACEHOLDER_TOKENS, MOCK_PREVIEW_CONTEXT, renderTemplate } from "@/lib/template-utils";
@@ -124,6 +124,7 @@ export async function createTemplateVersion(input: {
   projectId: string | null;
   subject: string;
   bodyHtml: string;
+  actor?: { id: string; name: string };
 }): Promise<Prisma.EmailTemplateGetPayload<{}>> {
   const result = await db.$transaction(async (tx) => {
     const currentActive = await tx.emailTemplate.findFirst({
@@ -150,7 +151,7 @@ export async function createTemplateVersion(input: {
         audience: input.audience,
         projectId: input.projectId ?? null,
         subject: input.subject,
-        bodyHtml: input.bodyHtml,
+        bodyHtml: sanitizeTemplateHtml(input.bodyHtml),
         version: nextVersion,
         isActive: true,
       },
@@ -162,8 +163,9 @@ export async function createTemplateVersion(input: {
   // Audit: non-blocking, outside transaction
   recordAudit({
     action: result.version === 1 ? "template_created" : "template_updated",
-    actorType: "super_admin",
-    actorLabel: "Unknown (auth not yet wired)", // TODO: replace with session.user once auth lands
+    actorType: "admin",
+    actorId: input.actor?.id,
+    actorLabel: input.actor?.name ?? "System",
     entityType: "EmailTemplate",
     entityId: result.id,
     projectId: result.projectId ?? undefined,

@@ -1,6 +1,7 @@
 import { requireActiveSession } from "@/lib/authz";
 import { NextResponse } from "next/server";
 import { generateReport, REPORT_DEFINITIONS } from "@/lib/data/reports";
+import { csvCell, xlsxCellValue } from "@/lib/report-export";
 
 export async function GET(
   request: Request,
@@ -12,7 +13,7 @@ export async function GET(
 
   const def = REPORT_DEFINITIONS.find((d) => d.slug === type);
   if (!def) {
-    return NextResponse.json({ error: `Unknown report type: ${type}` }, { status: 404 });
+    return NextResponse.json({ error: "Unknown report type" }, { status: 404 });
   }
 
   const actor = await requireActiveSession(() => null);
@@ -25,14 +26,9 @@ export async function GET(
     const rows = await generateReport(type, ownerId);
 
     if (format === "csv") {
-      const header = def.columns.map((c) => c.label).join(",");
+      const header = def.columns.map((c) => csvCell(c.label)).join(",");
       const body = rows
-        .map((r) => def.columns.map((c) => {
-          const v = r[c.key];
-          if (v == null) return "";
-          const s = String(v);
-          return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-        }).join(","))
+        .map((r) => def.columns.map((c) => csvCell(r[c.key])).join(","))
         .join("\n");
       const csv = `${header}\n${body}`;
       return new NextResponse(csv, {
@@ -44,11 +40,12 @@ export async function GET(
     }
 
     if (format === "xlsx") {
-      const ExcelJS = await import("exceljs");
+      const ExcelJSModule = await import("exceljs");
+      const ExcelJS = ExcelJSModule.default ?? ExcelJSModule;
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet(def.label);
       sheet.columns = def.columns.map((c) => ({ header: c.label, key: c.key, width: 20 }));
-      rows.forEach((r) => sheet.addRow(r));
+      rows.forEach((row) => sheet.addRow(def.columns.map((column) => xlsxCellValue(row[column.key], column.key))));
       const buffer = await workbook.xlsx.writeBuffer();
       return new NextResponse(buffer, {
         headers: {
@@ -61,6 +58,7 @@ export async function GET(
     // Default: JSON
     return NextResponse.json(rows);
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[reports] report generation failed:", err);
+    return NextResponse.json({ error: "Failed to generate report" }, { status: 500 });
   }
 }

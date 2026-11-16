@@ -5,6 +5,7 @@ import { getActiveTemplate, renderTemplate } from "@/lib/data/templates";
 import { logNotification } from "@/lib/data/notifications";
 import { createPasswordToken } from "@/lib/data/password-reset";
 import { DEMO_STAFF_IDS } from "@/lib/demo";
+import { escapeHtml } from "@/lib/template-utils";
 
 export type AdminRecord = {
   id: string;
@@ -91,6 +92,12 @@ export async function inviteAssociate(input: {
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
     const projectLabel = projectName ? `${projectName.name} at ${projectName.company}` : "a project";
+    const safeProjectLabel = escapeHtml(projectLabel);
+    const safeAdminName = escapeHtml(input.name);
+    const safeAdminEmail = escapeHtml(email);
+    const safeProjectName = escapeHtml(projectName?.name ?? "a project");
+    const safeCompanyName = escapeHtml(projectName?.company ?? "your organisation");
+    const safeSignInUrl = escapeHtml(`${baseUrl}/auth/signin`);
     const resend = new Resend(process.env.RESEND_API_KEY ?? "");
 
     if (created && role === "super_admin") {
@@ -101,19 +108,19 @@ export async function inviteAssociate(input: {
 <tr><td style="padding:40px 20px;background-color:#f3f4f6;">
 <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background-color:#ffffff;border-radius:12px;overflow:hidden;">
 <tr><td style="padding:32px 32px 0;">
-<h1 style="margin:0;font-size:20px;font-weight:700;color:#111827;">You've been invited as a Super Admin on ${projectLabel}</h1>
+<h1 style="margin:0;font-size:20px;font-weight:700;color:#111827;">You've been invited as a Super Admin on ${safeProjectLabel}</h1>
 </td></tr>
 <tr><td style="padding:16px 32px;">
-<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${input.name},</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${safeAdminName},</p>
 <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">
-You've been invited as a <strong>Super Admin</strong> on <strong>${projectName ? projectName.name : "a project"}</strong> at ${projectName ? projectName.company : "your organisation"}.
+You've been invited as a <strong>Super Admin</strong> on <strong>${safeProjectName}</strong> at ${safeCompanyName}.
 </p>
 <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">
-To activate your account, sign in with Microsoft using exactly this email address: <strong>${email}</strong>. No password is needed.
+To activate your account, sign in with Microsoft using exactly this email address: <strong>${safeAdminEmail}</strong>. No password is needed.
 </p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
 <tr><td style="background-color:#7c3aed;border-radius:8px;padding:12px 24px;">
-<a href="${baseUrl}/auth/signin" style="color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;display:inline-block;">
+<a href="${safeSignInUrl}" style="color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;display:inline-block;">
 Sign in with Microsoft
 </a>
 </td></tr>
@@ -187,24 +194,25 @@ Scheduler &mdash; Multi-project scheduling platform
       // New user without password — send setup link
       const { rawToken } = await createPasswordToken(admin.id);
       const setupUrl = `${baseUrl}/auth/set-password/${rawToken}`;
+      const safeSetupUrl = escapeHtml(setupUrl);
 
       const html = `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <tr><td style="padding:40px 20px;background-color:#f3f4f6;">
 <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background-color:#ffffff;border-radius:12px;overflow:hidden;">
 <tr><td style="padding:32px 32px 0;">
-<h1 style="margin:0;font-size:20px;font-weight:700;color:#111827;">You've been invited to ${projectLabel}</h1>
+<h1 style="margin:0;font-size:20px;font-weight:700;color:#111827;">You've been invited to ${safeProjectLabel}</h1>
 </td></tr>
 <tr><td style="padding:16px 32px;">
-<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${input.name},</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${safeAdminName},</p>
 <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">
-You've been added as an associate on <strong>${projectName ? projectName.name : "a project"}</strong> at ${projectName ? projectName.company : "your organisation"}.
+You've been added as an associate on <strong>${safeProjectName}</strong> at ${safeCompanyName}.
 </p>
 <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">
 To get started, set up your password using the link below. This link expires in 48 hours.
 </p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
 <tr><td style="background-color:#7c3aed;border-radius:8px;padding:12px 24px;">
-<a href="${setupUrl}" style="color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;display:inline-block;">
+<a href="${safeSetupUrl}" style="color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;display:inline-block;">
 Set up your password
 </a>
 </td></tr>

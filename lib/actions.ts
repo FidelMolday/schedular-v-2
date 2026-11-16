@@ -130,6 +130,12 @@ export async function createProjectAction(formData: {
   redirect("/admin/projects");
 }
 
+function isValidBookingParticipant(name: unknown, email: unknown): name is string {
+  return typeof name === "string" && name.length > 0 && name.length <= 200 && !/[<>]/.test(name) &&
+    typeof email === "string" && email.length <= 254 &&
+    /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email);
+}
+
 export async function confirmBookingAction(input: {
   projectId: string;
   dateKey: string;
@@ -143,7 +149,7 @@ export async function confirmBookingAction(input: {
   | { ok: true; adminName: string; meetingPlatform: string | null; zoomJoinUrl: string | null; teamsJoinUrl: string | null; meetingFallbackReason: string | null }
   | { ok: false; reason: "slot_full" | "no_admin_available" | "rate_limited" | "too_short_notice" | "admin_not_eligible" | "max_bookings_reached" }
 > {
-  if (!input.projectId || !input.participantEmail) {
+  if (!input.projectId || !isValidBookingParticipant(input.participantName, input.participantEmail)) {
     return { ok: false, reason: "slot_full" };
   }
   if (input.participantId) {
@@ -273,9 +279,10 @@ export async function saveTemplateAction(formData: {
   bodyHtml: string;
 }) {
   const actor = await requireActiveSession();
+  const auditActor = await db.admin.findUnique({ where: { id: actor.id }, select: { name: true } });
   if (formData.projectId) await requireProjectAccess(actor, formData.projectId);
   else requireRole(actor, ["org_owner"]);
-  await createTemplateVersion(formData);
+  await createTemplateVersion({ ...formData, actor: { id: actor.id, name: auditActor?.name ?? actor.id } });
   revalidatePath("/admin/templates");
   if (formData.projectId) {
     revalidatePath(`/admin/templates/${formData.projectId}/edit`);
@@ -395,7 +402,8 @@ export async function previewAdminUnavailableAction(adminId: string, fromDate: s
 export async function commitAdminUnavailableAction(adminId: string, fromDate: string, toDate: string) {
   const actor = await requireActiveSession();
   if (!(await checkAdminUnavailableAccess(actor, adminId, fromDate, toDate))) throw new Error("Forbidden");
-  const result = await commitAdminUnavailable(adminId, fromDate, toDate, actor);
+  const auditActor = await db.admin.findUnique({ where: { id: actor.id }, select: { name: true } });
+  const result = await commitAdminUnavailable(adminId, fromDate, toDate, actor, auditActor?.name ?? actor.id);
   revalidatePath("/admin/calendar");
   revalidatePath("/admin/bulk-reschedule");
   return result;
@@ -410,7 +418,8 @@ export async function previewDateShiftAction(projectId: string, fromDate: string
 export async function commitDateShiftAction(projectId: string, fromDate: string, toDate: string, offsetDays: number) {
   const actor = await requireActiveSession();
   await requireProjectAccess(actor, projectId);
-  const result = await commitDateShift(projectId, fromDate, toDate, offsetDays);
+  const auditActor = await db.admin.findUnique({ where: { id: actor.id }, select: { name: true } });
+  const result = await commitDateShift(projectId, fromDate, toDate, offsetDays, actor, auditActor?.name ?? actor.id);
   revalidatePath("/admin/calendar");
   revalidatePath("/admin/bulk-reschedule");
   return result;
@@ -418,10 +427,11 @@ export async function commitDateShiftAction(projectId: string, fromDate: string,
 
 export async function sendTestAction(templateId: string, recipientEmail: string) {
   const actor = await requireActiveSession();
+  const auditActor = await db.admin.findUnique({ where: { id: actor.id }, select: { name: true } });
   const template = await db.emailTemplate.findUnique({ where: { id: templateId }, select: { projectId: true } });
   if (template?.projectId) await requireProjectAccess(actor, template.projectId);
   else requireRole(actor, ["org_owner"]);
-  await sendTestEmail(templateId, recipientEmail);
+  await sendTestEmail(templateId, recipientEmail, { id: actor.id, name: auditActor?.name ?? actor.id });
   revalidatePath(`/admin/templates/${templateId}/edit`);
 }
 

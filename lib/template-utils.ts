@@ -1,4 +1,47 @@
 import type { Prisma } from "@prisma/client";
+import sanitizeHtml from "sanitize-html";
+
+const TEMPLATE_ALLOWED_TAGS = ["div", "h1", "p", "strong", "a", "br", "img"];
+const SAFE_CSS_VALUE = /^(?!.*(?:url\s*\(|expression|javascript|@import|\\|[<>])).{1,120}$/i;
+const TEMPLATE_ALLOWED_STYLES: Record<string, Record<string, RegExp[]>> = {
+  "*": Object.fromEntries([
+    "font-family", "max-width", "margin", "font-size", "font-weight", "color",
+    "background", "background-color", "border", "border-top", "border-radius",
+    "padding", "text-align", "text-decoration", "letter-spacing", "line-height",
+    "overflow", "display",
+  ].map((property) => [property, [SAFE_CSS_VALUE]])),
+};
+
+/** Sanitize template markup while preserving placeholders in text and URL attributes. */
+export function sanitizeTemplateHtml(input: string): string {
+  const tokens: string[] = [];
+  const protectedInput = input.replace(/\{\{[\w#/$\s]+\}\}/g, (token) => {
+    const marker = `TEMPLATEPLACEHOLDER${tokens.length}END`;
+    tokens.push(token);
+    return marker;
+  });
+  const clean = sanitizeHtml(protectedInput, {
+    allowedTags: TEMPLATE_ALLOWED_TAGS,
+    allowedAttributes: { "*": ["style"], a: ["href", "style"], img: ["src", "alt", "width", "height"] },
+    allowedStyles: TEMPLATE_ALLOWED_STYLES,
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: { img: ["https"] },
+    allowProtocolRelative: false,
+    disallowedTagsMode: "discard",
+    transformTags: {
+      img: (_tagName, attribs) => {
+        const safeAttributes = { ...attribs };
+        if (!/^https:\/\//i.test(safeAttributes.src ?? "")) delete safeAttributes.src;
+        return { tagName: "img", attribs: safeAttributes };
+      },
+    },
+  });
+  return clean.replace(/TEMPLATEPLACEHOLDER(\d+)END/g, (_match, index: string) => tokens[Number(index)] ?? "");
+}
+
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+}
 
 export type EmailTemplateWithDefault = Prisma.EmailTemplateGetPayload<{}> & {
   isGlobalDefault: boolean;
@@ -104,8 +147,9 @@ export function renderTemplate(
 
   for (const key of Object.keys(context)) {
     const re = new RegExp(`\\{\\{${key}\\}\\}`, "g");
-    subject = subject.replace(re, context[key]);
-    bodyHtml = bodyHtml.replace(re, context[key]);
+    subject = subject.replace(re, context[key].replace(/[\r\n\u0000-\u001f\u007f]/g, ""));
+    bodyHtml = bodyHtml.replace(re, escapeHtml(context[key]));
   }
-  return { subject, bodyHtml };
+  subject = subject.replace(/[\r\n\u0000-\u001f\u007f]/g, "");
+  return { subject, bodyHtml: sanitizeTemplateHtml(bodyHtml) };
 }

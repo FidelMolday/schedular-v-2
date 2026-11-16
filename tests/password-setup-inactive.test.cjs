@@ -4,6 +4,7 @@ const { test } = require("node:test");
 const { db } = require("../lib/db.ts");
 const resetRoute = require("../app/api/auth/request-password-reset/route.ts");
 const setupRoute = require("../app/api/auth/setup-password/route.ts");
+const fs = require("node:fs");
 
 function hashToken(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -59,6 +60,13 @@ test("inactive and missing admins get generic reset/setup responses; active toke
     const activeGet = await setupRoute.GET(new Request(`http://localhost/api/auth/setup-password?token=${activeRaw}`));
     const activeGetBody = await activeGet.json();
     assert.equal(activeGetBody.valid, true);
+    const shortPassword = await setupRoute.POST(new Request("http://localhost/api/auth/setup-password", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: activeRaw, password: "Short-123" }),
+    }));
+    const shortBody = await shortPassword.json();
+    console.log("RAW setup POST short password:", JSON.stringify({ status: shortPassword.status, body: shortBody }));
+    assert.equal(shortPassword.status, 400);
+    assert.match(shortBody.error, /at least 12 characters/);
     const activePost = await setupRoute.POST(new Request("http://localhost/api/auth/setup-password", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: activeRaw, password: "A-strong-test-password-123" }),
     }));
@@ -69,4 +77,11 @@ test("inactive and missing admins get generic reset/setup responses; active toke
     await db.admin.deleteMany({ where: { id: { in: [inactive.id, active.id] } } });
     await db.$disconnect();
   }
+});
+
+test("password setup form states the 12-character minimum", () => {
+  const source = fs.readFileSync(require.resolve("../components/PasswordSetupForm.tsx"), "utf8");
+  assert.match(source, /password\.length < 12/);
+  assert.match(source, /Password must be at least 12 characters\./);
+  assert.doesNotMatch(source, /password\.length < 8|at least 8 characters/i);
 });

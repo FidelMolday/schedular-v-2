@@ -76,6 +76,7 @@ export async function commitAdminUnavailable(
   fromDate: string,
   toDate: string,
   actor: AuthorizationActor,
+  actorLabel: string,
 ): Promise<{ succeeded: number; failed: { bookingId: string; reason: string }[] }> {
   const bookings = await db.booking.findMany({
     where: {
@@ -110,7 +111,7 @@ export async function commitAdminUnavailable(
           assigned = true;
           break;
         }
-        const result = await reassignBookingAdmin(b.id, pa.admin.id);
+        const result = await reassignBookingAdmin(b.id, pa.admin.id, actor.id, actorLabel);
         if (result.ok) {
           succeeded++;
           assigned = true;
@@ -231,7 +232,9 @@ export async function commitDateShift(
   projectId: string,
   fromDate: string,
   toDate: string,
-  offsetDays: number
+  offsetDays: number,
+  actor: AuthorizationActor,
+  actorLabel: string
 ): Promise<{ succeeded: number; failed: { bookingId: string; reason: string }[] }> {
   const bookings = await db.booking.findMany({
     where: {
@@ -248,7 +251,7 @@ export async function commitDateShift(
 
   for (const b of bookings) {
     const newDateKey = addDays(b.dateKey, offsetDays);
-    const result = await rescheduleBookingTime(b.id, newDateKey, b.time, { keepSameAdminIfPossible: true });
+    const result = await rescheduleBookingTime(b.id, newDateKey, b.time, { keepSameAdminIfPossible: true, actor: { actorType: "admin", actorLabel } });
     if (result.ok) {
       succeeded++;
     } else {
